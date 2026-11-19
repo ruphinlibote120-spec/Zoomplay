@@ -16,7 +16,15 @@ import android.speech.SpeechRecognizer
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
+import android.app.RecoverableSecurityException
 import android.content.Context
+import android.content.IntentSender
+import androidx.activity.result.IntentSenderRequest
+import android.widget.CheckBox
+import android.widget.ScrollView
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -85,6 +93,19 @@ class MainActivity : AppCompatActivity() {
             store.micOn = false
             updateMicUi()
             Toast.makeText(this, "Le micro est nécessaire pour les commandes vocales", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private var pendingDelete: List<Track> = emptyList()
+
+    private val deleteLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
+        if (r.resultCode == RESULT_OK) {
+            if (Build.VERSION.SDK_INT >= 30) {
+                toast("Doublons supprimés")
+                scan()
+            } else {
+                deleteTracks(pendingDelete)
+            }
         }
     }
 
@@ -159,6 +180,7 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.btnSearch).setOnClickListener { toggleSearch() }
         findViewById<View>(R.id.btnSort).setOnClickListener { sortDialog() }
+        findViewById<View>(R.id.btnDup).setOnClickListener { findDuplicates() }
 
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -261,6 +283,7 @@ class MainActivity : AppCompatActivity() {
             req.add(Manifest.permission.POST_NOTIFICATIONS)
         } else {
             req.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            if (Build.VERSION.SDK_INT <= 28) req.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
         permLauncher.launch(req.toTypedArray())
     }
@@ -540,6 +563,117 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             .show()
+    }
+
+    // ---- Doublons ----
+
+    private fun findDuplicates() {
+        if (!hasAudioPermission()) { requestPerms(); return }
+        toast("Recherche des doublons…")
+        Thread {
+            val groups = Duplicates.find(all)
+            runOnUiThread { if (!isDestroyed) showDuplicates(groups) }
+        }.start()
+    }
+
+    private fun showDuplicates(groups: List<List<Track>>) {
+        if (groups.isEmpty()) {
+            MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
+                .setTitle("Aucun doublon")
+                .setMessage("Aucun titre en double n'a été trouvé dans ta bibliothèque.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        val fmt = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+        val pad = dp(16f).toInt()
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(pad, pad / 2, pad, 0)
+        val boxes = ArrayList<Pair<CheckBox, Track>>()
+        groups.forEachIndexed { gi, g ->
+            val h = TextView(this)
+            h.text = "Doublon " + (gi + 1) + " · " + g.size + " fichiers"
+            h.setTextColor(getColor(R.color.accent))
+            h.textSize = 13f
+            h.setPadding(0, pad / 2, 0, 0)
+            box.addView(h)
+            g.forEachIndexed { i, t ->
+                val cb = CheckBox(this)
+                cb.text = t.title + "\n" + fmtTime(t.durationMs) + " · ajouté le " + fmt.format(Date(t.dateAdded * 1000)) +
+                    (if (i == 0) " · à garder" else "")
+                cb.setTextColor(getColor(R.color.text))
+                cb.textSize = 14f
+                cb.isChecked = i > 0
+                box.addView(cb)
+                boxes.add(Pair(cb, t))
+            }
+        }
+        val sv = ScrollView(this)
+        sv.addView(box)
+        val total = groups.sumOf { it.size - 1 }
+        MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
+            .setTitle(groups.size.toString() + " doublon(s) trouvé(s)")
+            .setMessage("Les fichiers cochés seront supprimés ($total par défaut). Le plus ancien de chaque groupe est conservé.")
+            .setView(sv)
+            .setNegativeButton("Annuler", null)
+            .setPositiveButton("Supprimer") { _, _ ->
+                val sel = boxes.filter { it.first.isChecked }.map { it.second }
+                if (sel.isEmpty()) {
+                    toast("Aucun fichier coché")
+                } else {
+                    MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
+                        .setTitle("Supprimer " + sel.size + " fichier(s) ?")
+                        .setMessage("Les fichiers seront effacés définitivement du téléphone.")
+                        .setNegativeButton("Annuler", null)
+                        .setPositiveButton("Supprimer") { _, _ -> deleteTracks(sel) }
+                        .show()
+                }
+            }
+            .show()
+    }
+
+    private fun deleteTracks(ts: List<Track>) {
+        if (ts.isEmpty()) return
+        pendingDelete = ts
+        try {
+            if (Build.VERSION.SDK_INT >= 30) {
+                val pi = MediaStore.createDeleteRequest(contentResolver, ts.map { it.uri })
+                deleteLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+                return
+            }
+        } catch (e: Exception) {
+            toast("Suppression impossible")
+            return
+        }
+        Thread {
+            var recoverable: IntentSender? = null
+            var done = 0
+            val rest = ArrayList<Track>()
+            for (t in ts) {
+                if (recoverable != null) { rest.add(t); continue }
+                try {
+                    done += contentResolver.delete(t.uri, null, null)
+                } catch (e: SecurityException) {
+                    if (Build.VERSION.SDK_INT >= 29 && e is RecoverableSecurityException) {
+                        recoverable = e.userAction.actionIntent.intentSender
+                        rest.add(t)
+                    }
+                } catch (e: Exception) {
+                }
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                val r = recoverable
+                if (r != null) {
+                    pendingDelete = rest
+                    deleteLauncher.launch(IntentSenderRequest.Builder(r).build())
+                } else {
+                    toast("$done fichier(s) supprimé(s)")
+                    scan()
+                }
+            }
+        }.start()
     }
 
     // ---- Micro permanent ----
