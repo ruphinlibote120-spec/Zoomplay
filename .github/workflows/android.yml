@@ -36,7 +36,7 @@ jobs:
       - name: Report Gradle errors
         if: failure()
         run: |
-          msg=$(grep -E "^e: |error:|FAILED|What went wrong|Execution failed|Could not|> " build.log | head -40)
+          msg=$(grep -E "^e: |error:|What went wrong|Execution failed|Could not|Unresolved|AAPT" build.log | head -40)
           msg="${msg//'%'/'%25'}"
           msg="${msg//$'\n'/'%0A'}"
           msg="${msg//$'\r'/'%0D'}"

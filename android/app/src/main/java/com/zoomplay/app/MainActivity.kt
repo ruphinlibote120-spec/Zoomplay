@@ -303,8 +303,9 @@ class MainActivity : AppCompatActivity() {
     private fun refresh() {
         val q = search.text.toString().trim().lowercase()
         var g = group
-        if (g?.pl != null) {
-            val pid = g.pl.id
+        val gp = g?.pl
+        if (gp != null) {
+            val pid = gp.id
             g = store.playlists().firstOrNull { it.id == pid }?.let { Entry(it.name, it.ids.size, it, byIds(it.ids)) }
             group = g
         }
