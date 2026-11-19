@@ -2,7 +2,6 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_player"
     android:fillViewport="true">
 
     <LinearLayout
@@ -26,7 +25,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Réduire"
                 android:src="@drawable/ic_down"
-                android:tint="@color/text" />
+                android:tint="?attr/zText" />
             <View
                 android:layout_width="0dp"
                 android:layout_height="1dp"
@@ -38,7 +37,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Partager"
                 android:src="@drawable/ic_share"
-                android:tint="@color/text" />
+                android:tint="?attr/zText" />
         </LinearLayout>
 
         <ImageView
@@ -60,7 +59,7 @@
             android:marqueeRepeatLimit="marquee_forever"
             android:scrollHorizontally="true"
             android:singleLine="true"
-            android:textColor="@color/text"
+            android:textColor="?attr/zText"
             android:textSize="26sp"
             android:textStyle="bold" />
 
@@ -71,7 +70,7 @@
             android:layout_marginTop="4dp"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="#B3FFFFFF"
+            android:textColor="?attr/zMuted"
             android:textSize="16sp" />
 
         <LinearLayout
@@ -87,7 +86,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Favori"
                 android:src="@drawable/ic_heart"
-                android:tint="@color/text" />
+                android:tint="?attr/zText" />
             <ImageButton
                 android:id="@+id/btnAddPl"
                 android:layout_width="44dp"
@@ -95,7 +94,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Ajouter à une playlist"
                 android:src="@drawable/ic_playlist_add"
-                android:tint="@color/text" />
+                android:tint="?attr/zText" />
             <View
                 android:layout_width="0dp"
                 android:layout_height="1dp"
@@ -107,7 +106,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Égaliseur"
                 android:src="@drawable/ic_tune"
-                android:tint="@color/text" />
+                android:tint="?attr/zText" />
             <ImageButton
                 android:id="@+id/btnQueue"
                 android:layout_width="44dp"
@@ -115,7 +114,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="File d'attente"
                 android:src="@drawable/ic_queue"
-                android:tint="@color/text" />
+                android:tint="?attr/zText" />
             <ImageButton
                 android:id="@+id/btnMore"
                 android:layout_width="44dp"
@@ -123,7 +122,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Plus d'options"
                 android:src="@drawable/ic_more"
-                android:tint="@color/text" />
+                android:tint="?attr/zText" />
         </LinearLayout>
 
         <SeekBar
@@ -134,9 +133,9 @@
             android:max="1000"
             android:paddingStart="0dp"
             android:paddingEnd="0dp"
-            android:progressBackgroundTint="#40FFFFFF"
-            android:progressTint="#FFFFFF"
-            android:thumbTint="#FFFFFF" />
+            android:progressBackgroundTint="?attr/zLine"
+            android:progressTint="?attr/zText"
+            android:thumbTint="?attr/zText" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -149,7 +148,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="0:00"
-                android:textColor="#B3FFFFFF"
+                android:textColor="?attr/zMuted"
                 android:textSize="13sp" />
 
             <TextView
@@ -157,7 +156,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="0:00"
-                android:textColor="#B3FFFFFF"
+                android:textColor="?attr/zMuted"
                 android:textSize="13sp" />
         </LinearLayout>
 
@@ -174,7 +173,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Aléatoire"
                 android:src="@drawable/ic_shuffle"
-                android:tint="@color/muted" />
+                android:tint="?attr/zMuted" />
             <View
                 android:layout_width="0dp"
                 android:layout_height="1dp"
@@ -186,7 +185,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Précédent"
                 android:src="@drawable/ic_prev"
-                android:tint="@color/text" />
+                android:tint="?attr/zText" />
             <View
                 android:layout_width="0dp"
                 android:layout_height="1dp"
@@ -199,7 +198,7 @@
                 android:background="@drawable/bg_play_white"
                 android:contentDescription="Lecture ou pause"
                 android:src="@drawable/ic_play"
-                android:tint="#0E1220" />
+                android:tint="?attr/zBg" />
 
             <View
                 android:layout_width="0dp"
@@ -212,7 +211,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Suivant"
                 android:src="@drawable/ic_next"
-                android:tint="@color/text" />
+                android:tint="?attr/zText" />
             <View
                 android:layout_width="0dp"
                 android:layout_height="1dp"
@@ -224,7 +223,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Répéter"
                 android:src="@drawable/ic_repeat"
-                android:tint="@color/muted" />
+                android:tint="?attr/zMuted" />
         </LinearLayout>
     </LinearLayout>
 </ScrollView>

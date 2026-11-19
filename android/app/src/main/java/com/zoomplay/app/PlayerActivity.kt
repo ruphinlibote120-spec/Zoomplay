@@ -3,7 +3,6 @@ package com.zoomplay.app
 import android.content.ComponentName
 import android.content.ContentUris
 import android.content.Intent
-import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -63,11 +62,19 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        store = Store(this)
+        val zt = Themes.current(store)
+        setTheme(zt.styleRes)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_player)
-        window.statusBarColor = Color.parseColor("#2B4A9A")
-        window.navigationBarColor = Color.parseColor("#0E1220")
-        store = Store(this)
+        val top = tc(R.attr.zPlayerTop)
+        val bottom = tc(R.attr.zBg)
+        findViewById<View>(android.R.id.content).background = android.graphics.drawable.GradientDrawable(
+            android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(top, bottom)
+        )
+        window.statusBarColor = top
+        window.navigationBarColor = bottom
+        androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = !zt.dark
 
         cover = findViewById(R.id.cover)
         title = findViewById(R.id.title)
@@ -174,12 +181,12 @@ class PlayerActivity : AppCompatActivity() {
         btnPlay.setImageResource(if (c.isPlaying) R.drawable.ic_pause else R.drawable.ic_play)
         val fav = store.isFav(id)
         btnLike.setImageResource(if (fav) R.drawable.ic_heart_filled else R.drawable.ic_heart)
-        btnLike.setColorFilter(getColor(if (fav) R.color.accent else R.color.text))
-        btnShuffle.setColorFilter(getColor(if (c.shuffleModeEnabled) R.color.accent else R.color.muted))
+        btnLike.setColorFilter(tc(if (fav) R.attr.zAccent else R.attr.zText))
+        btnShuffle.setColorFilter(tc(if (c.shuffleModeEnabled) R.attr.zAccent else R.attr.zMuted))
         btnRepeat.setImageResource(
             if (c.repeatMode == Player.REPEAT_MODE_ONE) R.drawable.ic_repeat_one else R.drawable.ic_repeat
         )
-        btnRepeat.setColorFilter(getColor(if (c.repeatMode == Player.REPEAT_MODE_OFF) R.color.muted else R.color.accent))
+        btnRepeat.setColorFilter(tc(if (c.repeatMode == Player.REPEAT_MODE_OFF) R.attr.zMuted else R.attr.zAccent))
     }
 
     private fun share() {
@@ -245,8 +252,8 @@ class PlayerActivity : AppCompatActivity() {
                 if (i == pls.size) {
                     val et = android.widget.EditText(this)
                     et.hint = "Nom de la playlist"
-                    et.setTextColor(getColor(R.color.text))
-                    et.setHintTextColor(getColor(R.color.muted))
+                    et.setTextColor(tc(R.attr.zText))
+                    et.setHintTextColor(tc(R.attr.zMuted))
                     val pad = dp(20f).toInt()
                     val box = android.widget.FrameLayout(this)
                     box.setPadding(pad, pad / 2, pad, 0)

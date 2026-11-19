@@ -39,7 +39,7 @@ object EqDialog {
         }
 
         val boostLabel = TextView(ctx)
-        boostLabel.setTextColor(ctx.getColor(R.color.text))
+        boostLabel.setTextColor(ctx.tc(R.attr.zText))
         boostLabel.textSize = 15f
         root.addView(boostLabel)
         val boostBar = SeekBar(ctx)
@@ -80,7 +80,7 @@ object EqDialog {
 
         for (i in 0 until 5) {
             val l = TextView(ctx)
-            l.setTextColor(ctx.getColor(R.color.muted))
+            l.setTextColor(ctx.tc(R.attr.zMuted))
             l.textSize = 13f
             l.setPadding(0, pad / 2, 0, 0)
             root.addView(l)
@@ -125,7 +125,7 @@ object EqDialog {
 
         val note = TextView(ctx)
         note.text = "Au-delà de 100 %, baisse un peu le volume si le son sature."
-        note.setTextColor(ctx.getColor(R.color.muted))
+        note.setTextColor(ctx.tc(R.attr.zMuted))
         note.textSize = 12f
         note.setPadding(0, pad / 2, 0, 0)
         root.addView(note)

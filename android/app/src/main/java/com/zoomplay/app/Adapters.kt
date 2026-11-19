@@ -50,7 +50,7 @@ class TrackAdapter(
         h.title.text = t.title
         h.sub.text = t.artist + " · " + fmtTime(t.durationMs)
         val on = t.id == playingId
-        h.title.setTextColor(ctx.getColor(if (on) R.color.accent else R.color.text))
+        h.title.setTextColor(ctx.tc(if (on) R.attr.zAccent else R.attr.zText))
         h.itemView.setOnClickListener {
             val p = h.bindingAdapterPosition
             if (p != RecyclerView.NO_POSITION) onClick(p)

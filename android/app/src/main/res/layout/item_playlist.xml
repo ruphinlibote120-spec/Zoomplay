@@ -13,11 +13,11 @@
         android:id="@+id/icon"
         android:layout_width="48dp"
         android:layout_height="48dp"
-        android:background="@color/surface2"
+        android:background="?attr/zSurface2"
         android:contentDescription="Playlist"
         android:padding="12dp"
         android:src="@drawable/ic_queue"
-        android:tint="@color/accent" />
+        android:tint="?attr/zAccent" />
 
     <LinearLayout
         android:layout_width="0dp"
@@ -32,7 +32,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="@color/text"
+            android:textColor="?attr/zText"
             android:textSize="15sp"
             android:textStyle="bold" />
 
@@ -40,7 +40,7 @@
             android:id="@+id/count"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/muted"
+            android:textColor="?attr/zMuted"
             android:textSize="13sp" />
     </LinearLayout>
 </LinearLayout>

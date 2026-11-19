@@ -5,10 +5,10 @@
     android:viewportWidth="96"
     android:viewportHeight="96">
     <path
-        android:fillColor="#B7C4D6"
+        android:fillColor="?attr/zMuted"
         android:fillType="evenOdd"
         android:pathData="M48,4a44,44 0 1,0 0.001,0z M48,28a20,20 0 1,1 -0.001,0z" />
     <path
-        android:fillColor="#B7C4D6"
+        android:fillColor="?attr/zMuted"
         android:pathData="M48,40a8,8 0 1,0 0.001,0z" />
 </vector>

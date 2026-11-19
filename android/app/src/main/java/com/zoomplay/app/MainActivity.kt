@@ -135,9 +135,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        store = Store(this)
+        setTheme(Themes.current(store).styleRes)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        store = Store(this)
 
         list = findViewById(R.id.list)
         empty = findViewById(R.id.empty)
@@ -179,6 +180,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<View>(R.id.btnSearch).setOnClickListener { toggleSearch() }
+        findViewById<View>(R.id.btnTheme).setOnClickListener { themeDialog() }
         findViewById<View>(R.id.btnSort).setOnClickListener { sortDialog() }
         findViewById<View>(R.id.btnDup).setOnClickListener { findDuplicates() }
 
@@ -337,7 +339,7 @@ class MainActivity : AppCompatActivity() {
         chips.forEachIndexedChild { i, tv ->
             val on = i == tab
             tv.setBackgroundResource(if (on) R.drawable.bg_chip_on else R.drawable.bg_chip_off)
-            tv.setTextColor(getColor(if (on) R.color.accent_ink else R.color.text))
+            tv.setTextColor(tc(if (on) R.attr.zBg else R.attr.zText))
             tv.text = if (i == 0 && all.isNotEmpty()) "Chansons (" + all.size + ")" else chipNames[i]
         }
 
@@ -525,8 +527,8 @@ class MainActivity : AppCompatActivity() {
     private fun askNewPlaylist(t: Track?) {
         val et = EditText(this)
         et.hint = "Nom de la playlist"
-        et.setTextColor(getColor(R.color.text))
-        et.setHintTextColor(getColor(R.color.muted))
+        et.setTextColor(tc(R.attr.zText))
+        et.setHintTextColor(tc(R.attr.zMuted))
         val pad = dp(20f).toInt()
         val box = android.widget.FrameLayout(this)
         box.setPadding(pad, pad / 2, pad, 0)
@@ -565,6 +567,55 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    // ---- Thèmes ----
+
+    private fun themeDialog() {
+        val cur = store.theme
+        val pad = dp(8f).toInt()
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(pad * 2, pad, pad * 2, pad)
+        var dlg: androidx.appcompat.app.AlertDialog? = null
+        Themes.all.forEachIndexed { i, t ->
+            val row = LinearLayout(this)
+            row.orientation = LinearLayout.HORIZONTAL
+            row.gravity = android.view.Gravity.CENTER_VERTICAL
+            row.setPadding(0, pad, 0, pad)
+            val sw = View(this)
+            val bgc = android.graphics.drawable.GradientDrawable()
+            bgc.shape = android.graphics.drawable.GradientDrawable.OVAL
+            bgc.setColor(t.bg)
+            bgc.setStroke(dp(2f).toInt(), t.accent)
+            val inner = android.graphics.drawable.GradientDrawable()
+            inner.shape = android.graphics.drawable.GradientDrawable.OVAL
+            inner.setColor(t.accent)
+            val ld = android.graphics.drawable.LayerDrawable(arrayOf(bgc, inner))
+            ld.setLayerInset(1, dp(11f).toInt(), dp(11f).toInt(), dp(11f).toInt(), dp(11f).toInt())
+            sw.background = ld
+            row.addView(sw, LinearLayout.LayoutParams(dp(36f).toInt(), dp(36f).toInt()))
+            val tv = TextView(this)
+            tv.text = t.name + (if (t.dark) "" else "  (clair)") + (if (i == cur) "  ✓" else "")
+            tv.setTextColor(tc(if (i == cur) R.attr.zAccent else R.attr.zText))
+            tv.textSize = 16f
+            val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            lp.marginStart = dp(14f).toInt()
+            row.addView(tv, lp)
+            row.setOnClickListener {
+                store.theme = i
+                dlg?.dismiss()
+                recreate()
+            }
+            box.addView(row)
+        }
+        val sv = ScrollView(this)
+        sv.addView(box)
+        dlg = MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
+            .setTitle("Thème (" + Themes.all.size + " styles)")
+            .setView(sv)
+            .setNegativeButton("Fermer", null)
+            .show()
+    }
+
     // ---- Doublons ----
 
     private fun findDuplicates() {
@@ -594,7 +645,7 @@ class MainActivity : AppCompatActivity() {
         groups.forEachIndexed { gi, g ->
             val h = TextView(this)
             h.text = "Doublon " + (gi + 1) + " · " + g.size + " fichiers"
-            h.setTextColor(getColor(R.color.accent))
+            h.setTextColor(tc(R.attr.zAccent))
             h.textSize = 13f
             h.setPadding(0, pad / 2, 0, 0)
             box.addView(h)
@@ -602,7 +653,7 @@ class MainActivity : AppCompatActivity() {
                 val cb = CheckBox(this)
                 cb.text = t.title + "\n" + fmtTime(t.durationMs) + " · ajouté le " + fmt.format(Date(t.dateAdded * 1000)) +
                     (if (i == 0) " · à garder" else "")
-                cb.setTextColor(getColor(R.color.text))
+                cb.setTextColor(tc(R.attr.zText))
                 cb.textSize = 14f
                 cb.isChecked = i > 0
                 box.addView(cb)
@@ -715,7 +766,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateMicUi() {
         val on = store.micOn
-        btnMic.setColorFilter(getColor(if (on) R.color.accent else R.color.muted))
+        btnMic.setColorFilter(tc(if (on) R.attr.zAccent else R.attr.zMuted))
     }
 
     private fun batteryHint() {

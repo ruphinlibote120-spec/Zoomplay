@@ -23,6 +23,13 @@ import android.view.ViewOutlineProvider
 import android.widget.ImageView
 import java.util.concurrent.Executors
 
+/** Couleur du thème courant (attribut zBg, zText, zAccent…). */
+fun Context.tc(attr: Int): Int {
+    val tv = android.util.TypedValue()
+    theme.resolveAttribute(attr, tv, true)
+    return tv.data
+}
+
 fun Context.dp(v: Float): Float = v * resources.displayMetrics.density
 
 fun fmtTime(ms: Long): String {

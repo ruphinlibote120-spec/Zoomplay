@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <attr name="zBg" format="color" />
+    <attr name="zSurface" format="color" />
+    <attr name="zSurface2" format="color" />
+    <attr name="zLine" format="color" />
+    <attr name="zText" format="color" />
+    <attr name="zMuted" format="color" />
+    <attr name="zAccent" format="color" />
+    <attr name="zAccentInk" format="color" />
+    <attr name="zPlayerTop" format="color" />
+</resources>

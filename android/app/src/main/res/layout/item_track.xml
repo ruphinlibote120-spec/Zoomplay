@@ -33,7 +33,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="@color/text"
+            android:textColor="?attr/zText"
             android:textSize="16sp" />
 
         <TextView
@@ -42,7 +42,7 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="@color/muted"
+            android:textColor="?attr/zMuted"
             android:textSize="13sp" />
     </LinearLayout>
 
@@ -53,5 +53,5 @@
         android:background="?attr/selectableItemBackgroundBorderless"
         android:contentDescription="Options"
         android:src="@drawable/ic_more"
-        android:tint="@color/muted" />
+        android:tint="?attr/zMuted" />
 </LinearLayout>
