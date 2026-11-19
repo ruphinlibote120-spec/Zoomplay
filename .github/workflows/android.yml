@@ -1,0 +1,53 @@
+name: Build Zoomplay APK
+
+on:
+  push:
+    branches: [main]
+    paths: ['android/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Accept Android licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build release APK
+        working-directory: android
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace -Pvc=${{ github.run_number }} assembleRelease 2>&1 | tee ../build.log
+
+      - name: Report Gradle errors
+        if: failure()
+        run: |
+          msg=$(grep -E "^e: |error:|FAILED|What went wrong|Execution failed|Could not|> " build.log | head -40)
+          msg="${msg//'%'/'%25'}"
+          msg="${msg//$'\n'/'%0A'}"
+          msg="${msg//$'\r'/'%0D'}"
+          echo "::error title=Gradle errors::$msg"
+
+      - name: Prepare APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk Zoomplay.apk
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.${{ github.run_number }}
+          name: Zoomplay 1.${{ github.run_number }}
+          files: Zoomplay.apk
+          make_latest: true

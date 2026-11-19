@@ -1,0 +1,93 @@
+package com.zoomplay.app
+
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ImageButton
+import android.widget.ImageView
+import android.widget.TextView
+import androidx.recyclerview.widget.RecyclerView
+
+class TrackAdapter(
+    private val onClick: (Int) -> Unit,
+    private val onMore: (Track, View) -> Unit
+) : RecyclerView.Adapter<TrackAdapter.VH>() {
+
+    private var items: List<Track> = emptyList()
+    private var playingId: Long = -1L
+
+    class VH(v: View) : RecyclerView.ViewHolder(v) {
+        val cover: ImageView = v.findViewById(R.id.cover)
+        val title: TextView = v.findViewById(R.id.title)
+        val sub: TextView = v.findViewById(R.id.sub)
+        val more: ImageButton = v.findViewById(R.id.more)
+    }
+
+    fun submit(list: List<Track>) {
+        items = list
+        notifyDataSetChanged()
+    }
+
+    fun setPlaying(id: Long) {
+        if (id != playingId) {
+            playingId = id
+            notifyDataSetChanged()
+        }
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+        val v = LayoutInflater.from(parent.context).inflate(R.layout.item_track, parent, false)
+        return VH(v)
+    }
+
+    override fun getItemCount() = items.size
+
+    override fun onBindViewHolder(h: VH, position: Int) {
+        val t = items[position]
+        val ctx = h.itemView.context
+        roundCorners(h.cover, ctx.dp(8f))
+        ArtLoader.load(ctx, t, h.cover, 160)
+        h.title.text = t.title
+        h.sub.text = t.artist + " · " + fmtTime(t.durationMs)
+        val on = t.id == playingId
+        h.title.setTextColor(ctx.getColor(if (on) R.color.accent else R.color.text))
+        h.itemView.setOnClickListener {
+            val p = h.bindingAdapterPosition
+            if (p != RecyclerView.NO_POSITION) onClick(p)
+        }
+        h.more.setOnClickListener { onMore(t, it) }
+    }
+}
+
+class PlaylistAdapter(
+    private val onClick: (Store.Playlist) -> Unit,
+    private val onLong: (Store.Playlist) -> Unit
+) : RecyclerView.Adapter<PlaylistAdapter.VH>() {
+
+    private var items: List<Store.Playlist> = emptyList()
+
+    class VH(v: View) : RecyclerView.ViewHolder(v) {
+        val name: TextView = v.findViewById(R.id.name)
+        val count: TextView = v.findViewById(R.id.count)
+    }
+
+    fun submit(list: List<Store.Playlist>) {
+        items = list
+        notifyDataSetChanged()
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+        val v = LayoutInflater.from(parent.context).inflate(R.layout.item_playlist, parent, false)
+        return VH(v)
+    }
+
+    override fun getItemCount() = items.size
+
+    override fun onBindViewHolder(h: VH, position: Int) {
+        val p = items[position]
+        h.name.text = p.name
+        h.count.text = p.ids.size.toString() + " titre(s)"
+        h.itemView.setOnClickListener { onClick(p) }
+        h.itemView.setOnLongClickListener { onLong(p); true }
+    }
+}
