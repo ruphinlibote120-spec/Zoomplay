@@ -1,6 +1,6 @@
 package com.zoomplay.app
 
-import android.app.AlertDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import android.content.Context
 import android.os.Bundle
 import android.view.Gravity
@@ -132,7 +132,7 @@ object EqDialog {
 
         val sv = android.widget.ScrollView(ctx)
         sv.addView(root)
-        AlertDialog.Builder(ctx, com.google.android.material.R.style.Theme_Material3_Dark_Dialog)
+        MaterialAlertDialogBuilder(ctx, R.style.ZoomDialog)
             .setTitle("Amplificateur et égaliseur")
             .setView(sv)
             .setPositiveButton("OK", null)

@@ -12,4 +12,16 @@
         <item name="android:navigationBarColor">@color/bg</item>
         <item name="android:colorBackground">@color/bg</item>
     </style>
+    <style name="ZoomDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorOnPrimary">@color/accent_ink</item>
+        <item name="colorSurface">@color/surface2</item>
+        <item name="colorSurfaceContainerHigh">@color/surface2</item>
+        <item name="colorOnSurface">@color/text</item>
+        <item name="colorOnSurfaceVariant">@color/text</item>
+        <item name="android:textColorPrimary">@color/text</item>
+        <item name="android:textColorSecondary">@color/text</item>
+        <item name="android:textColorAlertDialogListItem">@color/text</item>
+        <item name="android:colorBackground">@color/surface2</item>
+    </style>
 </resources>

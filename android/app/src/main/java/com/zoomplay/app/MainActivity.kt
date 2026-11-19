@@ -23,7 +23,7 @@ import android.widget.ProgressBar
 import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
-import android.app.AlertDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -409,7 +409,7 @@ class MainActivity : AppCompatActivity() {
         val pls = store.playlists()
         val names = pls.map { it.name }.toMutableList()
         names.add("+ Nouvelle playlist…")
-        AlertDialog.Builder(this, com.google.android.material.R.style.Theme_Material3_Dark_Dialog)
+        MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
             .setTitle("Ajouter à une playlist")
             .setItems(names.toTypedArray()) { _, i ->
                 if (i == pls.size) askNewPlaylist(t)
@@ -433,7 +433,7 @@ class MainActivity : AppCompatActivity() {
         val box = android.widget.FrameLayout(this)
         box.setPadding(pad, pad / 2, pad, 0)
         box.addView(et)
-        AlertDialog.Builder(this, com.google.android.material.R.style.Theme_Material3_Dark_Dialog)
+        MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
             .setTitle("Nouvelle playlist")
             .setView(box)
             .setPositiveButton("Créer") { _, _ ->
@@ -452,7 +452,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun playlistMenu(p: Store.Playlist) {
-        AlertDialog.Builder(this, com.google.android.material.R.style.Theme_Material3_Dark_Dialog)
+        MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
             .setTitle(p.name)
             .setItems(arrayOf("Lire", "Supprimer")) { _, i ->
                 if (i == 0) {
@@ -478,7 +478,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            AlertDialog.Builder(this, com.google.android.material.R.style.Theme_Material3_Dark_Dialog)
+            MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
                 .setTitle("Reconnaissance vocale absente")
                 .setMessage("Ton téléphone n'a pas de service de reconnaissance vocale. Installe ou active « Google » (application Google) puis réessaie.")
                 .setPositiveButton("OK", null)
@@ -513,7 +513,7 @@ class MainActivity : AppCompatActivity() {
         val sp = getSharedPreferences("zoomplay_ui", MODE_PRIVATE)
         if (sp.getBoolean("batteryHintShown", false)) return
         sp.edit().putBoolean("batteryHintShown", true).apply()
-        AlertDialog.Builder(this, com.google.android.material.R.style.Theme_Material3_Dark_Dialog)
+        MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
             .setTitle("Micro activé")
             .setMessage(
                 "Zoomplay t'écoute maintenant : dis « Zoom Play music », « Zoom Next », « Zoom Prev » ou « Zoom Pause ».\n\n" +

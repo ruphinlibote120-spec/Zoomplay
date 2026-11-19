@@ -4,6 +4,9 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -11,6 +14,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.util.BitmapLoader
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
@@ -65,6 +69,7 @@ class PlaybackService : MediaSessionService() {
         session = MediaSession.Builder(this, player)
             .setCallback(Callback())
             .setSessionActivity(open)
+            .setBitmapLoader(LogoLoader(this))
             .build()
         val provider = DefaultMediaNotificationProvider(this)
         provider.setSmallIcon(R.drawable.ic_notif)
@@ -192,4 +197,14 @@ class PlaybackService : MediaSessionService() {
             return Futures.immediateFuture(updated)
         }
     }
+}
+
+/** Fournit l'icône Zoomplay comme image de la notification, quel que soit le titre. */
+class LogoLoader(ctx: android.content.Context) : BitmapLoader {
+    private val bmp: Bitmap = BitmapFactory.decodeResource(ctx.resources, R.drawable.logo)
+        .let { Bitmap.createScaledBitmap(it, 384, 384, true) }
+
+    override fun supportsMimeType(mimeType: String) = true
+    override fun decodeBitmap(data: ByteArray): ListenableFuture<Bitmap> = Futures.immediateFuture(bmp)
+    override fun loadBitmap(uri: Uri): ListenableFuture<Bitmap> = Futures.immediateFuture(bmp)
 }

@@ -1,6 +1,6 @@
 package com.zoomplay.app
 
-import android.app.AlertDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import android.content.ComponentName
 import android.os.Bundle
 import android.os.Handler
@@ -204,7 +204,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun sleepDialog() {
         val labels = arrayOf("Désactivé", "10 minutes", "20 minutes", "30 minutes", "45 minutes", "60 minutes")
         val mins = intArrayOf(0, 10, 20, 30, 45, 60)
-        AlertDialog.Builder(this, com.google.android.material.R.style.Theme_Material3_Dark_Dialog)
+        MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
             .setTitle("Minuteur de sommeil")
             .setItems(labels) { _, i ->
                 val b = Bundle()
@@ -224,7 +224,7 @@ class PlayerActivity : AppCompatActivity() {
             (if (i == c.currentMediaItemIndex) "▶ " else "") + (md.title ?: "Titre") +
                 (md.artist?.let { " — $it" } ?: "")
         }
-        AlertDialog.Builder(this, com.google.android.material.R.style.Theme_Material3_Dark_Dialog)
+        MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
             .setTitle("File d'attente ($n)")
             .setItems(names) { _, i ->
                 c.seekToDefaultPosition(i)
