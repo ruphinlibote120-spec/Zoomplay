@@ -1,22 +1,27 @@
 package com.zoomplay.app
 
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import android.content.ComponentName
+import android.content.ContentUris
+import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.view.View
 import android.widget.ImageButton
 import android.widget.ImageView
+import android.widget.PopupMenu
 import android.widget.SeekBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
-import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.common.util.concurrent.ListenableFuture
 
 class PlayerActivity : AppCompatActivity() {
@@ -37,13 +42,9 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var btnLike: ImageButton
     private lateinit var btnShuffle: ImageButton
     private lateinit var btnRepeat: ImageButton
-    private lateinit var btnSpeed: MaterialButton
-    private lateinit var btnSleep: MaterialButton
 
-    private val speeds = floatArrayOf(1f, 1.25f, 1.5f, 2f, 0.75f)
-    private var speedIdx = 0
+    private val speeds = floatArrayOf(0.75f, 1f, 1.25f, 1.5f, 2f)
     private var currentId = -1L
-    private var currentTrack: Track? = null
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) { update() }
@@ -57,7 +58,6 @@ class PlayerActivity : AppCompatActivity() {
                 tCur.text = fmtTime(c.currentPosition)
                 tDur.text = fmtTime(c.duration)
             }
-            updateSleepLabel()
             ui.postDelayed(this, 500)
         }
     }
@@ -65,6 +65,8 @@ class PlayerActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_player)
+        window.statusBarColor = Color.parseColor("#2B4A9A")
+        window.navigationBarColor = Color.parseColor("#0E1220")
         store = Store(this)
 
         cover = findViewById(R.id.cover)
@@ -77,17 +79,18 @@ class PlayerActivity : AppCompatActivity() {
         btnLike = findViewById(R.id.btnLike)
         btnShuffle = findViewById(R.id.btnShuffle)
         btnRepeat = findViewById(R.id.btnRepeat)
-        btnSpeed = findViewById(R.id.btnSpeed)
-        btnSleep = findViewById(R.id.btnSleep)
 
-        roundCorners(cover, dp(20f))
+        roundCorners(cover, dp(16f))
+        cover.setImageResource(R.drawable.cover_placeholder)
         cover.post {
             val lp = cover.layoutParams
             lp.height = cover.width
             cover.layoutParams = lp
         }
+        title.isSelected = true
 
         findViewById<View>(R.id.btnDown).setOnClickListener { finish() }
+        findViewById<View>(R.id.btnShare).setOnClickListener { share() }
         findViewById<View>(R.id.btnPrev).setOnClickListener { controller?.seekToPrevious() }
         findViewById<View>(R.id.btnNext).setOnClickListener { controller?.seekToNext() }
         btnPlay.setOnClickListener {
@@ -109,15 +112,10 @@ class PlayerActivity : AppCompatActivity() {
         btnLike.setOnClickListener {
             if (currentId >= 0) { store.toggleFav(currentId); update() }
         }
-        btnSpeed.setOnClickListener {
-            val c = controller ?: return@setOnClickListener
-            speedIdx = (speedIdx + 1) % speeds.size
-            c.setPlaybackSpeed(speeds[speedIdx])
-            update()
-        }
-        btnSleep.setOnClickListener { sleepDialog() }
+        findViewById<View>(R.id.btnAddPl).setOnClickListener { pickPlaylist() }
         findViewById<View>(R.id.btnEq).setOnClickListener { EqDialog.show(this, controller) }
         findViewById<View>(R.id.btnQueue).setOnClickListener { queueDialog() }
+        findViewById<View>(R.id.btnMore).setOnClickListener { moreMenu(it) }
 
         seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
@@ -169,36 +167,56 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
         val id = item.mediaId.toLongOrNull() ?: -1L
-        val t = Track(
-            id, item.mediaMetadata.title?.toString() ?: "Titre",
-            item.mediaMetadata.artist?.toString() ?: "",
-            item.mediaMetadata.albumTitle?.toString() ?: "", 0L, 0L, 0L
-        )
-        // L'identifiant de pochette est retrouvé via MediaStore (loadThumbnail utilise l'URI du titre).
-        title.text = t.title
-        artist.text = t.artist
-        if (id != currentId) {
-            currentId = id
-            currentTrack = t
-            ArtLoader.load(this, t, cover, 640)
-        }
+        currentId = id
+        title.text = item.mediaMetadata.title?.toString() ?: "Titre"
+        artist.text = item.mediaMetadata.artist?.toString() ?: ""
+        title.isSelected = true
         btnPlay.setImageResource(if (c.isPlaying) R.drawable.ic_pause else R.drawable.ic_play)
-        btnLike.setImageResource(if (store.isFav(id)) R.drawable.ic_heart_filled else R.drawable.ic_heart)
-        btnLike.setColorFilter(getColor(if (store.isFav(id)) R.color.accent else R.color.muted))
+        val fav = store.isFav(id)
+        btnLike.setImageResource(if (fav) R.drawable.ic_heart_filled else R.drawable.ic_heart)
+        btnLike.setColorFilter(getColor(if (fav) R.color.accent else R.color.text))
         btnShuffle.setColorFilter(getColor(if (c.shuffleModeEnabled) R.color.accent else R.color.muted))
         btnRepeat.setImageResource(
             if (c.repeatMode == Player.REPEAT_MODE_ONE) R.drawable.ic_repeat_one else R.drawable.ic_repeat
         )
         btnRepeat.setColorFilter(getColor(if (c.repeatMode == Player.REPEAT_MODE_OFF) R.color.muted else R.color.accent))
-        val sp = c.playbackParameters.speed
-        speedIdx = speeds.indexOfFirst { it == sp }.let { if (it < 0) 0 else it }
-        btnSpeed.text = (if (sp == sp.toInt().toFloat()) sp.toInt().toString() else sp.toString()) + "×"
-        updateSleepLabel()
     }
 
-    private fun updateSleepLabel() {
+    private fun share() {
+        if (currentId < 0) return
+        val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, currentId)
+        val i = Intent(Intent.ACTION_SEND)
+        i.type = "audio/*"
+        i.putExtra(Intent.EXTRA_STREAM, uri)
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        startActivity(Intent.createChooser(i, "Partager ce titre"))
+    }
+
+    private fun moreMenu(anchor: View) {
+        val c = controller
+        val sp = c?.playbackParameters?.speed ?: 1f
         val left = store.sleepAt - System.currentTimeMillis()
-        btnSleep.text = if (store.sleepAt > 0 && left > 0) "Minuteur " + fmtTime(left) else "Minuteur"
+        val m = PopupMenu(this, anchor)
+        m.menu.add(0, 1, 0, "Vitesse de lecture (" + (if (sp == sp.toInt().toFloat()) sp.toInt().toString() else sp.toString()) + "×)")
+        m.menu.add(0, 2, 1, if (store.sleepAt > 0 && left > 0) "Minuteur de sommeil (" + fmtTime(left) + ")" else "Minuteur de sommeil")
+        m.setOnMenuItemClickListener {
+            if (it.itemId == 1) speedDialog() else sleepDialog()
+            true
+        }
+        m.show()
+    }
+
+    private fun speedDialog() {
+        val c = controller ?: return
+        val labels = speeds.map { (if (it == it.toInt().toFloat()) it.toInt().toString() else it.toString()) + "×" }.toTypedArray()
+        val cur = speeds.indexOfFirst { it == c.playbackParameters.speed }.let { if (it < 0) 1 else it }
+        MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
+            .setTitle("Vitesse de lecture")
+            .setSingleChoiceItems(labels, cur) { d, i ->
+                c.setPlaybackSpeed(speeds[i])
+                d.dismiss()
+            }
+            .show()
     }
 
     private fun sleepDialog() {
@@ -210,7 +228,49 @@ class PlayerActivity : AppCompatActivity() {
                 val b = Bundle()
                 b.putInt("min", mins[i])
                 controller?.sendCustomCommand(SessionCommand(PlaybackService.CMD_SLEEP, Bundle.EMPTY), b)
-                ui.postDelayed({ updateSleepLabel() }, 300)
+                if (mins[i] > 0) Toast.makeText(this, "Pause dans " + mins[i] + " min", Toast.LENGTH_SHORT).show()
+            }
+            .show()
+    }
+
+    private fun pickPlaylist() {
+        if (currentId < 0) return
+        val id = currentId
+        val pls = store.playlists()
+        val names = pls.map { it.name }.toMutableList()
+        names.add("+ Nouvelle playlist…")
+        MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
+            .setTitle("Ajouter à une playlist")
+            .setItems(names.toTypedArray()) { _, i ->
+                if (i == pls.size) {
+                    val et = android.widget.EditText(this)
+                    et.hint = "Nom de la playlist"
+                    et.setTextColor(getColor(R.color.text))
+                    et.setHintTextColor(getColor(R.color.muted))
+                    val pad = dp(20f).toInt()
+                    val box = android.widget.FrameLayout(this)
+                    box.setPadding(pad, pad / 2, pad, 0)
+                    box.addView(et)
+                    MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
+                        .setTitle("Nouvelle playlist")
+                        .setView(box)
+                        .setPositiveButton("Créer") { _, _ ->
+                            val name = et.text.toString().trim()
+                            if (name.isNotEmpty()) {
+                                val all = store.playlists()
+                                all.add(Store.Playlist(System.currentTimeMillis().toString(), name, arrayListOf(id)))
+                                store.savePlaylists(all)
+                                Toast.makeText(this, "Ajouté à $name", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        .setNegativeButton("Annuler", null)
+                        .show()
+                } else {
+                    val p = pls[i]
+                    if (!p.ids.contains(id)) p.ids.add(id)
+                    store.savePlaylists(pls)
+                    Toast.makeText(this, "Ajouté à " + p.name, Toast.LENGTH_SHORT).show()
+                }
             }
             .show()
     }

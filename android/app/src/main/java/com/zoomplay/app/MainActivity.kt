@@ -16,7 +16,10 @@ import android.speech.SpeechRecognizer
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
+import android.content.Context
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.ProgressBar
@@ -35,7 +38,6 @@ import androidx.media3.session.SessionToken
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.tabs.TabLayout
 import com.google.common.util.concurrent.ListenableFuture
 
 class MainActivity : AppCompatActivity() {
@@ -46,7 +48,7 @@ class MainActivity : AppCompatActivity() {
     private var all: List<Track> = emptyList()
     private var shown: List<Track> = emptyList()
     private var tab = 0
-    private var openPl: Store.Playlist? = null
+    private var group: Entry? = null
 
     private var future: ListenableFuture<MediaController>? = null
     private var controller: MediaController? = null
@@ -54,9 +56,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var list: RecyclerView
     private lateinit var empty: TextView
     private lateinit var search: EditText
-    private lateinit var tabs: TabLayout
-    private lateinit var btnPlay: MaterialButton
-    private lateinit var btnShuffle: MaterialButton
+    private lateinit var chips: LinearLayout
+    private lateinit var btnPlay: ImageButton
+    private lateinit var btnShuffle: ImageButton
     private lateinit var btnExtra: MaterialButton
     private lateinit var count: TextView
     private lateinit var btnMic: ImageButton
@@ -68,7 +70,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var miniProgress: ProgressBar
 
     private lateinit var trackAdapter: TrackAdapter
-    private lateinit var plAdapter: PlaylistAdapter
+    private lateinit var entryAdapter: EntryAdapter
+    private val chipNames = listOf("Chansons", "Playlists", "Favoris", "Artistes", "Albums")
 
     private var audioGranted = false
 
@@ -118,7 +121,7 @@ class MainActivity : AppCompatActivity() {
         list = findViewById(R.id.list)
         empty = findViewById(R.id.empty)
         search = findViewById(R.id.search)
-        tabs = findViewById(R.id.tabs)
+        chips = findViewById(R.id.chips)
         btnPlay = findViewById(R.id.btnPlay)
         btnShuffle = findViewById(R.id.btnShuffle)
         btnExtra = findViewById(R.id.btnExtra)
@@ -136,20 +139,26 @@ class MainActivity : AppCompatActivity() {
             onClick = { pos -> play(shown, pos, false) },
             onMore = { t, v -> trackMenu(t, v) }
         )
-        plAdapter = PlaylistAdapter(
-            onClick = { p -> openPl = p; refresh() },
-            onLong = { p -> playlistMenu(p) }
+        entryAdapter = EntryAdapter(
+            onClick = { e -> group = e; refresh() },
+            onLong = { e -> e.pl?.let { playlistMenu(it) } }
         )
         list.layoutManager = LinearLayoutManager(this)
 
-        tabs.addTab(tabs.newTab().setText("Titres"))
-        tabs.addTab(tabs.newTab().setText("Playlists"))
-        tabs.addTab(tabs.newTab().setText("Favoris"))
-        tabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-            override fun onTabSelected(t: TabLayout.Tab) { tab = t.position; openPl = null; refresh() }
-            override fun onTabUnselected(t: TabLayout.Tab?) {}
-            override fun onTabReselected(t: TabLayout.Tab?) {}
-        })
+        chipNames.forEachIndexed { i, name ->
+            val tv = TextView(this)
+            tv.text = name
+            tv.textSize = 15f
+            tv.setPadding(dp(18f).toInt(), dp(10f).toInt(), dp(18f).toInt(), dp(10f).toInt())
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            lp.marginEnd = dp(8f).toInt()
+            tv.layoutParams = lp
+            tv.setOnClickListener { tab = i; group = null; refresh() }
+            chips.addView(tv)
+        }
+
+        findViewById<View>(R.id.btnSearch).setOnClickListener { toggleSearch() }
+        findViewById<View>(R.id.btnSort).setOnClickListener { sortDialog() }
 
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -162,7 +171,7 @@ class MainActivity : AppCompatActivity() {
             if (shown.isNotEmpty()) play(shown, shown.indices.random(), true)
         }
         btnExtra.setOnClickListener {
-            if (openPl != null) { openPl = null; refresh() } else askNewPlaylist(null)
+            if (group != null) { group = null; refresh() } else askNewPlaylist(null)
         }
         findViewById<ImageButton>(R.id.btnRefresh).setOnClickListener {
             Toast.makeText(this, "Bibliothèque actualisée", Toast.LENGTH_SHORT).show()
@@ -182,7 +191,7 @@ class MainActivity : AppCompatActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (openPl != null) { openPl = null; refresh() }
+                if (group != null) { group = null; refresh() }
                 else { isEnabled = false; onBackPressedDispatcher.onBackPressed(); isEnabled = true }
             }
         })
@@ -276,49 +285,113 @@ class MainActivity : AppCompatActivity() {
         return ids.mapNotNull { m[it] }
     }
 
+    private fun sorted(l: List<Track>): List<Track> = when (store.sortMode) {
+        1 -> l.sortedBy { it.title.lowercase() }
+        2 -> l.sortedBy { it.artist.lowercase() }
+        3 -> l.sortedByDescending { it.durationMs }
+        else -> l.sortedByDescending { it.dateAdded }
+    }
+
+    private fun entries(): List<Entry> = when (tab) {
+        1 -> store.playlists().map { Entry(it.name, it.ids.size, it, byIds(it.ids)) }
+        3 -> all.groupBy { it.artist }.toSortedMap(String.CASE_INSENSITIVE_ORDER)
+            .map { Entry(it.key, it.value.size, null, it.value) }
+        else -> all.groupBy { it.album.ifBlank { "Album inconnu" } }.toSortedMap(String.CASE_INSENSITIVE_ORDER)
+            .map { Entry(it.key, it.value.size, null, it.value) }
+    }
+
     private fun refresh() {
         val q = search.text.toString().trim().lowercase()
-        val pl = openPl
-        val inPlaylists = tab == 1 && pl == null
-
-        shown = when {
-            tab == 0 -> all
-            tab == 2 -> { val f = store.favorites(); all.filter { f.contains(it.id) } }
-            pl != null -> byIds(pl.ids)
-            else -> emptyList()
+        var g = group
+        if (g?.pl != null) {
+            val pid = g.pl.id
+            g = store.playlists().firstOrNull { it.id == pid }?.let { Entry(it.name, it.ids.size, it, byIds(it.ids)) }
+            group = g
         }
-        if (q.isNotEmpty() && !inPlaylists) {
-            shown = shown.filter {
-                it.title.lowercase().contains(q) || it.artist.lowercase().contains(q) ||
-                    it.album.lowercase().contains(q)
-            }
+        val showEntries = g == null && (tab == 1 || tab == 3 || tab == 4)
+
+        chips.forEachIndexedChild { i, tv ->
+            val on = i == tab
+            tv.setBackgroundResource(if (on) R.drawable.bg_chip_on else R.drawable.bg_chip_off)
+            tv.setTextColor(getColor(if (on) R.color.accent_ink else R.color.text))
+            tv.text = if (i == 0 && all.isNotEmpty()) "Chansons (" + all.size + ")" else chipNames[i]
         }
 
-        btnPlay.visibility = if (inPlaylists) View.GONE else View.VISIBLE
-        btnShuffle.visibility = if (inPlaylists) View.GONE else View.VISIBLE
-        btnExtra.visibility = if (tab == 1) View.VISIBLE else View.GONE
-        btnExtra.text = if (pl != null) "← Playlists" else "Nouvelle playlist"
+        btnPlay.visibility = if (showEntries) View.GONE else View.VISIBLE
+        btnShuffle.visibility = if (showEntries) View.GONE else View.VISIBLE
+        btnExtra.visibility = if (g != null || tab == 1) View.VISIBLE else View.GONE
+        btnExtra.text = if (g != null) "← Retour" else "Nouvelle playlist"
 
-        if (inPlaylists) {
-            val pls = store.playlists()
-            plAdapter.submit(pls)
-            if (list.adapter !== plAdapter) list.adapter = plAdapter
-            count.text = pls.size.toString() + " playlist(s)"
-            showEmpty(pls.isEmpty(), "Aucune playlist.\nAppuie sur « Nouvelle playlist » pour en créer une.")
+        if (showEntries) {
+            var es = entries()
+            if (q.isNotEmpty()) es = es.filter { it.name.lowercase().contains(q) }
+            entryAdapter.submit(es)
+            if (list.adapter !== entryAdapter) list.adapter = entryAdapter
+            shown = emptyList()
+            count.text = es.size.toString() + " " + chipNames[tab].lowercase().trimEnd('s') + "(s)"
+            showEmpty(
+                es.isEmpty(),
+                if (tab == 1) "Aucune playlist.\nAppuie sur « Nouvelle playlist » pour en créer une."
+                else if (!hasAudioPermission()) "Autorise l'accès à la musique pour afficher tes titres.\nAppuie ici pour l'autoriser."
+                else "Aucun résultat."
+            )
         } else {
-            trackAdapter.submit(shown)
-            if (list.adapter !== trackAdapter) list.adapter = trackAdapter
-            count.text = if (pl != null) pl.name + " · " + shown.size else shown.size.toString() + " titre(s)"
-            val msg = when {
-                !hasAudioPermission() -> "Autorise l'accès à la musique pour afficher tes titres.\nAppuie ici pour l'autoriser."
-                tab == 2 -> "Aucun favori pour l'instant.\nAppuie sur ⋮ à côté d'un titre pour l'ajouter."
-                q.isNotEmpty() -> "Aucun résultat."
-                pl != null -> "Cette playlist est vide."
-                else -> "Aucun fichier audio trouvé sur le téléphone."
+            var l: List<Track> = when {
+                g != null -> if (g.pl != null) g.tracks else sorted(g.tracks)
+                tab == 2 -> { val f = store.favorites(); sorted(all.filter { f.contains(it.id) }) }
+                else -> sorted(all)
             }
-            showEmpty(shown.isEmpty(), msg)
+            if (q.isNotEmpty()) {
+                l = l.filter {
+                    it.title.lowercase().contains(q) || it.artist.lowercase().contains(q) ||
+                        it.album.lowercase().contains(q)
+                }
+            }
+            shown = l
+            trackAdapter.submit(l)
+            if (list.adapter !== trackAdapter) list.adapter = trackAdapter
+            count.text = if (g != null) g.name + " · " + l.size else l.size.toString() + " titre(s)"
+            showEmpty(
+                l.isEmpty(),
+                when {
+                    !hasAudioPermission() -> "Autorise l'accès à la musique pour afficher tes titres.\nAppuie ici pour l'autoriser."
+                    tab == 2 && g == null -> "Aucun favori pour l'instant.\nAppuie sur ⋮ à côté d'un titre pour l'ajouter."
+                    q.isNotEmpty() -> "Aucun résultat."
+                    g != null -> "Cette liste est vide."
+                    else -> "Aucun fichier audio trouvé sur le téléphone."
+                }
+            )
         }
         updateMini()
+    }
+
+    private inline fun LinearLayout.forEachIndexedChild(f: (Int, TextView) -> Unit) {
+        for (i in 0 until childCount) f(i, getChildAt(i) as TextView)
+    }
+
+    private fun toggleSearch() {
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        if (search.visibility == View.GONE) {
+            search.visibility = View.VISIBLE
+            search.requestFocus()
+            imm.showSoftInput(search, InputMethodManager.SHOW_IMPLICIT)
+        } else {
+            search.setText("")
+            search.visibility = View.GONE
+            imm.hideSoftInputFromWindow(search.windowToken, 0)
+        }
+    }
+
+    private fun sortDialog() {
+        val labels = arrayOf("Récemment ajoutés", "Titre (A-Z)", "Artiste (A-Z)", "Durée (la plus longue)")
+        MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
+            .setTitle("Trier les titres")
+            .setSingleChoiceItems(labels, store.sortMode) { d, i ->
+                store.sortMode = i
+                d.dismiss()
+                refresh()
+            }
+            .show()
     }
 
     private fun showEmpty(on: Boolean, msg: String) {
@@ -376,7 +449,7 @@ class MainActivity : AppCompatActivity() {
         m.menu.add(0, 2, 1, "Ajouter à la file")
         m.menu.add(0, 3, 2, if (store.isFav(t.id)) "Retirer des favoris" else "Ajouter aux favoris")
         m.menu.add(0, 4, 3, "Ajouter à une playlist")
-        if (openPl != null) m.menu.add(0, 5, 4, "Retirer de la playlist")
+        if (group?.pl != null) m.menu.add(0, 5, 4, "Retirer de la playlist")
         m.setOnMenuItemClickListener { mi ->
             val c = controller
             when (mi.itemId) {
@@ -390,11 +463,12 @@ class MainActivity : AppCompatActivity() {
                 } else play(listOf(t), 0, false)
                 3 -> { store.toggleFav(t.id); refresh() }
                 4 -> pickPlaylist(t)
-                5 -> openPl?.let { p ->
-                    p.ids.remove(t.id)
-                    val all = store.playlists()
-                    all.firstOrNull { it.id == p.id }?.ids?.remove(t.id)
-                    store.savePlaylists(all)
+                5 -> group?.pl?.let { p ->
+                    val pls = store.playlists()
+                    val real = pls.firstOrNull { it.id == p.id }
+                    real?.ids?.remove(t.id)
+                    store.savePlaylists(pls)
+                    group = real?.let { Entry(it.name, it.ids.size, it, byIds(it.ids)) }
                     refresh()
                 }
             }

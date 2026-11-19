@@ -30,6 +30,10 @@ class Store(ctx: Context) {
         }
         set(v) { prefs.edit().putString("eqBands", v.joinToString(",")).apply() }
 
+    var sortMode: Int
+        get() = prefs.getInt("sortMode", 0)
+        set(v) { prefs.edit().putInt("sortMode", v).apply() }
+
     var sleepAt: Long
         get() = prefs.getLong("sleepAt", 0L)
         set(v) { prefs.edit().putLong("sleepAt", v).apply() }

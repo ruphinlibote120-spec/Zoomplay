@@ -39,10 +39,10 @@ fun roundCorners(v: View, radiusPx: Float) {
     v.clipToOutline = true
 }
 
-/** Une seule image (le logo Zoomplay) pour tous les titres. */
+/** Une seule image (disque) pour tous les titres. */
 object ArtLoader {
     fun load(ctx: Context, t: Track, iv: ImageView, sizePx: Int) {
         iv.tag = t.id
-        iv.setImageResource(R.drawable.logo)
+        iv.setImageResource(R.drawable.cover_placeholder)
     }
 }

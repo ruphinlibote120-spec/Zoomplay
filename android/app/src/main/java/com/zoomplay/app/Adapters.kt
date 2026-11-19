@@ -59,19 +59,22 @@ class TrackAdapter(
     }
 }
 
-class PlaylistAdapter(
-    private val onClick: (Store.Playlist) -> Unit,
-    private val onLong: (Store.Playlist) -> Unit
-) : RecyclerView.Adapter<PlaylistAdapter.VH>() {
+/** Ligne de liste de groupes : playlist, artiste ou album. */
+class Entry(val name: String, val count: Int, val pl: Store.Playlist?, val tracks: List<Track>)
 
-    private var items: List<Store.Playlist> = emptyList()
+class EntryAdapter(
+    private val onClick: (Entry) -> Unit,
+    private val onLong: (Entry) -> Unit
+) : RecyclerView.Adapter<EntryAdapter.VH>() {
+
+    private var items: List<Entry> = emptyList()
 
     class VH(v: View) : RecyclerView.ViewHolder(v) {
         val name: TextView = v.findViewById(R.id.name)
         val count: TextView = v.findViewById(R.id.count)
     }
 
-    fun submit(list: List<Store.Playlist>) {
+    fun submit(list: List<Entry>) {
         items = list
         notifyDataSetChanged()
     }
@@ -84,10 +87,10 @@ class PlaylistAdapter(
     override fun getItemCount() = items.size
 
     override fun onBindViewHolder(h: VH, position: Int) {
-        val p = items[position]
-        h.name.text = p.name
-        h.count.text = p.ids.size.toString() + " titre(s)"
-        h.itemView.setOnClickListener { onClick(p) }
-        h.itemView.setOnLongClickListener { onLong(p); true }
+        val e = items[position]
+        h.name.text = e.name
+        h.count.text = e.count.toString() + " titre(s)"
+        h.itemView.setOnClickListener { onClick(e) }
+        h.itemView.setOnLongClickListener { onLong(e); true }
     }
 }
