@@ -8,6 +8,7 @@ import android.provider.MediaStore
 object Library {
     fun scan(ctx: Context): List<Track> {
         val out = ArrayList<Track>()
+        val ov = Store(ctx).titleOverrides()
         val a = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         val withPath = Build.VERSION.SDK_INT < 29
         val base = arrayListOf(
@@ -45,7 +46,7 @@ object Library {
                     out.add(
                         Track(
                             id = c.getLong(iId),
-                            title = c.getString(iTitle) ?: "Sans titre",
+                            title = ov[c.getLong(iId)] ?: c.getString(iTitle) ?: "Sans titre",
                             artist = if (artist.isNullOrBlank() || artist == "<unknown>") "Artiste inconnu" else artist,
                             album = if (album.isNullOrBlank() || album == "<unknown>") "" else album,
                             albumId = c.getLong(iAlbumId),

@@ -12,7 +12,10 @@ object TitleFix {
 
     /** Version corrigée d'un titre (ou le titre inchangé s'il est déjà correct). */
     fun clean(src: String): String {
-        var s = src.replace('_', ' ')
+        var s = java.text.Normalizer.normalize(src, java.text.Normalizer.Form.NFC)
+        s = s.replace(Regex("[\\u200B-\\u200F\\u2060\\uFEFF]"), "")
+        s = s.map { if (it.isWhitespace() || it == '\u00A0' || it == '\u202F') ' ' else it }.joinToString("")
+        s = s.replace('_', ' ')
         s = bitrate.replace(s, "")
         s = copyMark.replace(s, "")
         s = s.replace('[', '(').replace(']', ')').replace('{', '(').replace('}', ')')

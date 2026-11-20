@@ -894,6 +894,9 @@ class MainActivity : AppCompatActivity() {
     /** Affiche tout de suite les nouveaux noms (liste, mini-lecteur, notification), sans attendre le rescan. */
     private fun applyRenamed(done: Map<Long, Pair<String, String>>) {
         if (done.isEmpty()) return
+        val ov = HashMap(store.titleOverrides())
+        for ((id, d) in done) ov[id] = d.first
+        store.setTitleOverrides(ov)
         all = all.map {
             val d = done[it.id]
             if (d != null) it.copy(title = d.first, displayName = d.second) else it

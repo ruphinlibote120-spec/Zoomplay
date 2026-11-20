@@ -42,6 +42,23 @@ class Store(ctx: Context) {
         get() = prefs.getBoolean("vizAsked", false)
         set(v) { prefs.edit().putBoolean("vizAsked", v).apply() }
 
+    /** Titres corrigés par l'utilisateur : Android peut remettre l'ancien titre (tag du fichier) au rescan, ceux-ci priment. */
+    fun titleOverrides(): Map<Long, String> {
+        val out = HashMap<Long, String>()
+        try {
+            val o = JSONObject(prefs.getString("titleOv", "{}") ?: "{}")
+            for (k in o.keys()) k.toLongOrNull()?.let { out[it] = o.getString(k) }
+        } catch (e: Exception) {
+        }
+        return out
+    }
+
+    fun setTitleOverrides(m: Map<Long, String>) {
+        val o = JSONObject()
+        for ((k, v) in m) o.put(k.toString(), v)
+        prefs.edit().putString("titleOv", o.toString()).apply()
+    }
+
     var listStyle: Int
         get() = prefs.getInt("listStyle", 0)
         set(v) { prefs.edit().putInt("listStyle", v).apply() }
