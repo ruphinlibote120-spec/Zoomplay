@@ -861,6 +861,7 @@ class MainActivity : AppCompatActivity() {
         header("AUTRES")
         action("🎨  Thème de l'application") { themeDialog() }
         action("↕  Trier les titres") { sortDialog() }
+        action("👤  Artistes manquants") { findMissingArtists() }
         action("💾  Sauvegarder mes données") {
             val d = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
             backupLauncher.launch("zoomplay-sauvegarde-$d.zip")
@@ -874,6 +875,160 @@ class MainActivity : AppCompatActivity() {
             .setView(sv)
             .setNegativeButton("Fermer", null)
             .show()
+    }
+
+    // ---- Artistes manquants ----
+
+    private class MG(var artist: String, val tracks: List<Track>, val prefix: Boolean) {
+        var on = true
+    }
+
+    /** « Fally Ipupa - Eloko Oyo » -> ("Fally Ipupa", "Eloko Oyo"), sinon null. */
+    private fun artistPrefix(title: String): Pair<String, String>? {
+        val i = title.indexOf(" - ")
+        if (i < 2) return null
+        val l = title.substring(0, i).trim()
+        val r = title.substring(i + 3).trim()
+        if (l.length !in 2..40 || r.isEmpty()) return null
+        if (l.all { it.isDigit() || it == '.' || it == ' ' }) return null
+        return Pair(l, r)
+    }
+
+    private fun findMissingArtists() {
+        if (!hasAudioPermission()) { requestPerms(); return }
+        toast("Analyse des artistes…")
+        val snap = all
+        Thread {
+            val groups = buildArtistGroups(snap)
+            runOnUiThread { if (!isDestroyed) showArtistGroups(groups) }
+        }.start()
+    }
+
+    private fun buildArtistGroups(src: List<Track>): List<MG> {
+        val unknown = src.filter { it.artist == "Artiste inconnu" }
+        val out = ArrayList<MG>()
+        val used = HashSet<Long>()
+
+        // 1) même nom d'artiste écrit au début du titre
+        val byPrefix = HashMap<String, MutableList<Track>>()
+        val names = HashMap<String, MutableMap<String, Int>>()
+        for (t in unknown) {
+            val p = artistPrefix(t.title) ?: continue
+            val k = p.first.lowercase().replace(Regex("\\s+"), " ")
+            byPrefix.getOrPut(k) { ArrayList() }.add(t)
+            val m = names.getOrPut(k) { HashMap() }
+            m[p.first] = (m[p.first] ?: 0) + 1
+        }
+        for ((k, l) in byPrefix) {
+            if (l.size < 2) continue
+            val nm = names[k]?.maxByOrNull { it.value }?.key ?: continue
+            out.add(MG(nm, l, true))
+            l.forEach { used.add(it.id) }
+        }
+
+        // 2) même titre
+        fun norm(s: String) = s.lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
+        val allByTitle = src.groupBy { norm(it.title) }
+        val remaining = unknown.filter { !used.contains(it.id) }.groupBy { norm(it.title) }
+        for ((k, l) in remaining) {
+            if (k.isEmpty()) continue
+            val others = (allByTitle[k] ?: emptyList()).filter { it.artist != "Artiste inconnu" }
+            if (l.size < 2 && others.isEmpty()) continue
+            val sug = others.groupBy { it.artist }.maxByOrNull { it.value.size }?.key ?: ""
+            val g = MG(sug, l, false)
+            g.on = sug.isNotEmpty()
+            out.add(g)
+        }
+        return out.sortedByDescending { it.tracks.size }
+    }
+
+    private fun showArtistGroups(groups: List<MG>) {
+        if (groups.isEmpty()) {
+            MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
+                .setTitle("Rien à compléter")
+                .setMessage("Aucun groupe de chansons sans artiste n'a été trouvé.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        val pad = dp(14f).toInt()
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(pad, 0, pad, 0)
+        var strip: CheckBox? = null
+        if (groups.any { it.prefix }) {
+            val cb = CheckBox(this)
+            cb.text = "Retirer « Artiste - » du titre (renomme aussi le fichier)"
+            cb.setTextColor(tc(R.attr.zText))
+            cb.textSize = 13f
+            box.addView(cb)
+            strip = cb
+        }
+        val edits = ArrayList<Pair<EditText, MG>>()
+        for (g in groups) {
+            val head = CheckBox(this)
+            head.text = g.tracks.size.toString() + " chanson(s) · " + (if (g.prefix) "nom trouvé dans le titre" else "même titre")
+            head.setTextColor(tc(R.attr.zAccent))
+            head.textSize = 13f
+            head.isChecked = g.on
+            head.setOnCheckedChangeListener { _, v -> g.on = v }
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            lp.topMargin = dp(12f).toInt()
+            box.addView(head, lp)
+            val et = EditText(this)
+            et.setText(g.artist)
+            et.hint = "Nom de l'artiste"
+            et.setSingleLine(true)
+            et.setTextColor(tc(R.attr.zText))
+            et.setHintTextColor(tc(R.attr.zMuted))
+            box.addView(et)
+            val lst = TextView(this)
+            val shownT = g.tracks.take(4).joinToString("\n") { "• " + it.title }
+            lst.text = shownT + (if (g.tracks.size > 4) "\n… +" + (g.tracks.size - 4) + " autre(s)" else "")
+            lst.textSize = 12f
+            lst.setTextColor(tc(R.attr.zMuted))
+            box.addView(lst)
+            edits.add(Pair(et, g))
+        }
+        val sv = ScrollView(this)
+        sv.addView(box)
+        val wrap = LinearLayout(this)
+        wrap.addView(sv, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(400f).toInt()))
+        MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
+            .setTitle(groups.size.toString() + " groupe(s) sans artiste")
+            .setView(wrap)
+            .setPositiveButton("Appliquer") { _, _ ->
+                for ((et, g) in edits) g.artist = et.text.toString().trim()
+                applyArtistGroups(groups.filter { it.on && it.artist.isNotBlank() }, strip?.isChecked == true)
+            }
+            .setNegativeButton("Annuler", null)
+            .show()
+    }
+
+    private fun applyArtistGroups(groups: List<MG>, strip: Boolean) {
+        if (groups.isEmpty()) { toast("Aucun groupe coché"); return }
+        val mo = store.metaOverrides()
+        val changed = HashMap<Long, Track>()
+        val fixes = ArrayList<Fix>()
+        for (g in groups) {
+            val a = g.artist.trim()
+            for (t in g.tracks) {
+                val m = mo[t.id] ?: Store.Meta()
+                m.artist = a
+                mo[t.id] = m
+                val nt = t.copy(artist = a)
+                changed[t.id] = nt
+                if (strip && g.prefix) {
+                    artistPrefix(t.title)?.let { p -> fixes.add(Fix(nt, p.second)) }
+                }
+            }
+        }
+        store.setMetaOverrides(mo)
+        all = all.map { changed[it.id] ?: it }
+        changed.values.forEach { pushMetaToPlayer(it) }
+        refresh()
+        toast("Artiste ajouté à " + changed.size + " chanson(s)")
+        if (fixes.isNotEmpty()) applyFixes(fixes)
     }
 
     // ---- Sauvegarde ----
