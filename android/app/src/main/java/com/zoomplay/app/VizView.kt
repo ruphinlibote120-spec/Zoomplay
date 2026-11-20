@@ -20,6 +20,7 @@ object VizBus {
     @Volatile var sessionId: Int = 0
     /** Niveau de grave (0..1) et heure de la dernière mesure : lus par le logo animé. */
     @Volatile var bass: Float = 0f
+    @Volatile var voice: Float = 0f
     @Volatile var stamp: Long = 0L
 }
 
@@ -71,7 +72,7 @@ class VizView(ctx: Context, attrs: AttributeSet? = null) : View(ctx, attrs) {
                 v.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
                     override fun onWaveFormDataCapture(vis: Visualizer?, wave: ByteArray?, rate: Int) {}
                     override fun onFftDataCapture(vis: Visualizer?, fft: ByteArray?, rate: Int) {
-                        if (fft != null) compute(fft)
+                        if (fft != null) compute(fft, rate)
                     }
                 }, Visualizer.getMaxCaptureRate() / 2, false, true)
                 v.enabled = true
@@ -92,7 +93,7 @@ class VizView(ctx: Context, attrs: AttributeSet? = null) : View(ctx, attrs) {
         target = FloatArray(n)
     }
 
-    private fun compute(fft: ByteArray) {
+    private fun compute(fft: ByteArray, rate: Int) {
         val bins = fft.size / 2
         val out = FloatArray(n)
         var lo = 1
@@ -111,9 +112,25 @@ class VizView(ctx: Context, attrs: AttributeSet? = null) : View(ctx, attrs) {
             lo = hi
         }
         target = out
-        var bs = 0f
-        for (i in 0 until 4) bs = max(bs, out[i])
-        VizBus.bass = bs
+        // BASSE (< 130 Hz) et VOIX (300 Hz – 3,4 kHz) pour le logo animé
+        val sr = if (rate > 8000000) rate / 1000.0 else 44100.0
+        val binHz = sr / fft.size
+        val kb = (130.0 / binHz).toInt().coerceIn(1, bins - 1)
+        var bm = 0f
+        for (k in 1..kb) {
+            val re = fft[2 * k].toInt(); val im = fft[2 * k + 1].toInt()
+            bm = max(bm, sqrt((re * re + im * im).toFloat()))
+        }
+        val v0 = Math.ceil(300.0 / binHz).toInt().coerceIn(1, bins - 2)
+        val v1 = (3400.0 / binHz).toInt().coerceIn(v0 + 1, bins - 1)
+        var sum = 0f
+        for (k in v0..v1) {
+            val re = fft[2 * k].toInt(); val im = fft[2 * k + 1].toInt()
+            sum += (re * re + im * im).toFloat()
+        }
+        val vm = sqrt(sum / (v1 - v0 + 1))
+        VizBus.bass = ((20f * log10(bm + 1f) - 6f) / 36f).coerceIn(0f, 1f)
+        VizBus.voice = ((20f * log10(vm + 1f) - 6f) / 36f).coerceIn(0f, 1f)
         VizBus.stamp = android.os.SystemClock.uptimeMillis()
     }
 
