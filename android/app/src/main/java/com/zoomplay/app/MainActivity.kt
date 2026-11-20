@@ -797,13 +797,15 @@ class MainActivity : AppCompatActivity() {
         }
         val sv = ScrollView(this)
         sv.addView(box)
+        val wrap = LinearLayout(this)
+        wrap.addView(sv, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(380f).toInt()))
         val total = groups.sumOf { it.size - 1 }
         MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
             .setTitle(groups.size.toString() + " doublon(s) trouvé(s)")
-            .setMessage("Les fichiers cochés seront supprimés ($total par défaut). Le plus ancien de chaque groupe est conservé.")
-            .setView(sv)
+            .setMessage("Tout est coché sauf le plus ancien de chaque groupe. Appuie sur « Tout supprimer » pour effacer les $total doublons, ou décoche ceux à garder.")
+            .setView(wrap)
             .setNegativeButton("Annuler", null)
-            .setPositiveButton("Supprimer") { _, _ ->
+            .setPositiveButton("Tout supprimer") { _, _ ->
                 val sel = boxes.filter { it.first.isChecked }.map { it.second }
                 if (sel.isEmpty()) {
                     toast("Aucun fichier coché")
