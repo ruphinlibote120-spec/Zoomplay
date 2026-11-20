@@ -18,6 +18,9 @@ import kotlin.math.sqrt
 /** Identifiant de session audio du lecteur, partagé entre le service et l'écran de lecture. */
 object VizBus {
     @Volatile var sessionId: Int = 0
+    /** Niveau de grave (0..1) et heure de la dernière mesure : lus par le logo animé. */
+    @Volatile var bass: Float = 0f
+    @Volatile var stamp: Long = 0L
 }
 
 /** Visualiseur de son en direct : barres de mixer (LED) ou barres lisses, avec crêtes. */
@@ -108,6 +111,10 @@ class VizView(ctx: Context, attrs: AttributeSet? = null) : View(ctx, attrs) {
             lo = hi
         }
         target = out
+        var bs = 0f
+        for (i in 0 until 4) bs = max(bs, out[i])
+        VizBus.bass = bs
+        VizBus.stamp = android.os.SystemClock.uptimeMillis()
     }
 
     override fun onDetachedFromWindow() {

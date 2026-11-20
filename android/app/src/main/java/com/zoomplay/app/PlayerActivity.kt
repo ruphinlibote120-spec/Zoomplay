@@ -31,7 +31,7 @@ class PlayerActivity : AppCompatActivity() {
     private var controller: MediaController? = null
     private var dragging = false
 
-    private lateinit var cover: ImageView
+    private lateinit var cover: View
     private lateinit var title: TextView
     private lateinit var artist: TextView
     private lateinit var seek: SeekBar
@@ -94,8 +94,6 @@ class PlayerActivity : AppCompatActivity() {
         viz = findViewById(R.id.viz)
         viz.onNeedPermission = { micLauncher.launch(android.Manifest.permission.RECORD_AUDIO) }
 
-        roundCorners(cover, dp(16f))
-        cover.setImageResource(R.drawable.logo)
         cover.post {
             val lp = cover.layoutParams
             lp.height = cover.width

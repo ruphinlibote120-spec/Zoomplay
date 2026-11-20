@@ -40,13 +40,12 @@
                 android:tint="?attr/zText" />
         </LinearLayout>
 
-        <ImageView
+        <com.zoomplay.app.ZLogoView
             android:id="@+id/cover"
             android:layout_width="match_parent"
             android:layout_height="300dp"
             android:layout_marginTop="28dp"
-            android:contentDescription="Pochette"
-            android:scaleType="centerCrop" />
+            android:contentDescription="Logo Zoomplay animé" />
 
         <com.zoomplay.app.VizView
             android:id="@+id/viz"
