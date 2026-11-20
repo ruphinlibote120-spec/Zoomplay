@@ -47,6 +47,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import com.google.common.util.concurrent.ListenableFuture
@@ -167,7 +168,8 @@ class MainActivity : AppCompatActivity() {
         roundCorners(miniCover, dp(8f))
 
         trackAdapter = TrackAdapter(
-            onClick = { pos -> play(shown, pos, false) },
+            store,
+            onClick = { pos -> play(shown, pos, null) },
             onMore = { t, v -> trackMenu(t, v) }
         )
         entryAdapter = EntryAdapter(
@@ -189,7 +191,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<View>(R.id.btnSearch).setOnClickListener { toggleSearch() }
-        findViewById<View>(R.id.btnTheme).setOnClickListener { themeDialog() }
+        findViewById<View>(R.id.btnSettings).setOnClickListener { settingsDialog() }
         findViewById<View>(R.id.btnSort).setOnClickListener { sortDialog() }
         findViewById<View>(R.id.btnDup).setOnClickListener { findDuplicates() }
         findViewById<View>(R.id.btnFix).setOnClickListener { findBadTitles() }
@@ -200,7 +202,7 @@ class MainActivity : AppCompatActivity() {
             override fun afterTextChanged(s: Editable?) { refresh() }
         })
 
-        btnPlay.setOnClickListener { if (shown.isNotEmpty()) play(shown, 0, false) }
+        btnPlay.setOnClickListener { if (shown.isNotEmpty()) play(shown, 0, null) }
         btnShuffle.setOnClickListener {
             if (shown.isNotEmpty()) play(shown, shown.indices.random(), true)
         }
@@ -217,7 +219,7 @@ class MainActivity : AppCompatActivity() {
         miniPlay.setOnClickListener {
             val c = controller ?: return@setOnClickListener
             if (c.mediaItemCount == 0) {
-                if (all.isNotEmpty()) play(all, 0, false)
+                if (all.isNotEmpty()) play(all, 0, null)
             } else if (c.isPlaying) c.pause() else c.play()
         }
         findViewById<View>(R.id.miniNext).setOnClickListener { controller?.seekToNext() }
@@ -234,6 +236,7 @@ class MainActivity : AppCompatActivity() {
         if (audioGranted) scan() else requestPerms()
         refresh()
         updateMicUi()
+        if (savedInstanceState == null) handleViewIntent(intent)
     }
 
     override fun onStart() {
@@ -247,6 +250,7 @@ class MainActivity : AppCompatActivity() {
                 controller = c
                 c.addListener(listener)
                 updateMini()
+                pendingOpen?.let { pendingOpen = null; openUri(it) }
             } catch (e: Exception) {
             }
         }, ContextCompat.getMainExecutor(this))
@@ -362,6 +366,7 @@ class MainActivity : AppCompatActivity() {
             var es = entries()
             if (q.isNotEmpty()) es = es.filter { it.name.lowercase().contains(q) }
             entryAdapter.submit(es)
+            if (list.layoutManager !is LinearLayoutManager || list.layoutManager is GridLayoutManager) list.layoutManager = LinearLayoutManager(this)
             if (list.adapter !== entryAdapter) list.adapter = entryAdapter
             shown = emptyList()
             count.text = es.size.toString() + " " + chipNames[tab].lowercase().trimEnd('s') + "(s)"
@@ -384,6 +389,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             shown = l
+            val wantGrid = store.listStyle == 3
+            val isGrid = list.layoutManager is GridLayoutManager
+            if (wantGrid != isGrid) list.layoutManager = if (wantGrid) GridLayoutManager(this, 2) else LinearLayoutManager(this)
             trackAdapter.submit(l)
             if (list.adapter !== trackAdapter) list.adapter = trackAdapter
             count.text = if (g != null) g.name + " · " + l.size else l.size.toString() + " titre(s)"
@@ -437,13 +445,13 @@ class MainActivity : AppCompatActivity() {
 
     // ---- Lecture ----
 
-    private fun play(tracks: List<Track>, index: Int, shuffle: Boolean) {
+    private fun play(tracks: List<Track>, index: Int, shuffle: Boolean?) {
         val c = controller ?: run {
             Toast.makeText(this, "Le lecteur démarre, réessaie dans un instant", Toast.LENGTH_SHORT).show()
             return
         }
         if (tracks.isEmpty()) return
-        c.shuffleModeEnabled = shuffle
+        if (shuffle != null) c.shuffleModeEnabled = shuffle
         c.setMediaItems(tracks.map { it.toMediaItem() }, index.coerceIn(0, tracks.size - 1), 0L)
         c.prepare()
         c.play()
@@ -451,7 +459,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun currentTrack(c: MediaController): Track? {
         val item: MediaItem = c.currentMediaItem ?: return null
-        val id = item.mediaId.toLongOrNull() ?: return null
+        val id = item.mediaId.toLongOrNull() ?: -1L
         return all.firstOrNull { it.id == id } ?: Track(
             id, item.mediaMetadata.title?.toString() ?: "Titre",
             item.mediaMetadata.artist?.toString() ?: "", "", 0L, 0L, 0L
@@ -486,17 +494,18 @@ class MainActivity : AppCompatActivity() {
         m.menu.add(0, 3, 2, if (store.isFav(t.id)) "Retirer des favoris" else "Ajouter aux favoris")
         m.menu.add(0, 4, 3, "Ajouter à une playlist")
         if (group?.pl != null) m.menu.add(0, 5, 4, "Retirer de la playlist")
+        m.menu.add(0, 6, 5, "Renommer")
         m.setOnMenuItemClickListener { mi ->
             val c = controller
             when (mi.itemId) {
                 1 -> if (c != null && c.mediaItemCount > 0) {
                     c.addMediaItem(c.currentMediaItemIndex + 1, t.toMediaItem())
                     toast("Lu ensuite")
-                } else play(listOf(t), 0, false)
+                } else play(listOf(t), 0, null)
                 2 -> if (c != null && c.mediaItemCount > 0) {
                     c.addMediaItem(t.toMediaItem())
                     toast("Ajouté à la file")
-                } else play(listOf(t), 0, false)
+                } else play(listOf(t), 0, null)
                 3 -> { store.toggleFav(t.id); refresh() }
                 4 -> pickPlaylist(t)
                 5 -> group?.pl?.let { p ->
@@ -507,6 +516,7 @@ class MainActivity : AppCompatActivity() {
                     group = real?.let { Entry(it.name, it.ids.size, it, byIds(it.ids)) }
                     refresh()
                 }
+                6 -> renameDialog(t)
             }
             true
         }
@@ -567,7 +577,7 @@ class MainActivity : AppCompatActivity() {
             .setItems(arrayOf("Lire", "Supprimer")) { _, i ->
                 if (i == 0) {
                     val l = byIds(p.ids)
-                    if (l.isNotEmpty()) play(l, 0, false)
+                    if (l.isNotEmpty()) play(l, 0, null)
                 } else {
                     val pls = store.playlists().filter { it.id != p.id }
                     store.savePlaylists(pls)
@@ -575,6 +585,157 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             .show()
+    }
+
+    private fun renameDialog(t: Track) {
+        if (hasAudioPermission().not()) return
+        val et = EditText(this)
+        et.setText(t.title)
+        et.setSelectAllOnFocus(true)
+        et.setTextColor(tc(R.attr.zText))
+        val pad = dp(20f).toInt()
+        val box = android.widget.FrameLayout(this)
+        box.setPadding(pad, pad / 2, pad, 0)
+        box.addView(et)
+        MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
+            .setTitle("Renommer le fichier")
+            .setView(box)
+            .setPositiveButton("Renommer") { _, _ ->
+                val n = et.text.toString().trim()
+                if (n.isNotEmpty() && n != t.title) applyFixes(listOf(Fix(t, n)))
+            }
+            .setNegativeButton("Annuler", null)
+            .show()
+    }
+
+    // ---- Paramètres ----
+
+    private fun settingsDialog() {
+        val pad = dp(8f).toInt()
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(pad * 2, pad, pad * 2, pad)
+        var dlg: androidx.appcompat.app.AlertDialog? = null
+
+        fun header(txt: String) {
+            val h = TextView(this)
+            h.text = txt
+            h.textSize = 13f
+            h.setTextColor(tc(R.attr.zAccent))
+            h.setPadding(0, pad * 2, 0, pad / 2)
+            box.addView(h)
+        }
+        fun radios(names: List<String>, cur: Int, onPick: (Int) -> Unit) {
+            val rg = android.widget.RadioGroup(this)
+            names.forEachIndexed { i, n ->
+                val rb = android.widget.RadioButton(this)
+                rb.id = View.generateViewId()
+                rb.text = n
+                rb.setTextColor(tc(R.attr.zText))
+                rb.isChecked = i == cur
+                rg.addView(rb)
+                rb.setOnClickListener { onPick(i) }
+            }
+            box.addView(rg)
+        }
+        fun switch(txt: String, cur: Boolean, onSet: (Boolean) -> Unit) {
+            val sw = androidx.appcompat.widget.SwitchCompat(this)
+            sw.text = txt
+            sw.setTextColor(tc(R.attr.zText))
+            sw.isChecked = cur
+            sw.setPadding(0, pad, 0, pad)
+            sw.setOnCheckedChangeListener { _, v -> onSet(v) }
+            box.addView(sw)
+        }
+        fun action(txt: String, f: () -> Unit) {
+            val tv = TextView(this)
+            tv.text = txt
+            tv.textSize = 16f
+            tv.setTextColor(tc(R.attr.zText))
+            tv.setPadding(0, pad * 2, 0, pad * 2)
+            tv.setOnClickListener { dlg?.dismiss(); f() }
+            box.addView(tv)
+        }
+
+        header("STYLE DE LA LISTE")
+        radios(
+            listOf("Classique", "Compact (sans pochette)", "Détaillé (artiste, album, date)", "Grille (2 colonnes)", "Cartes"),
+            store.listStyle
+        ) { store.listStyle = it; refresh() }
+
+        header("TAILLE DU TEXTE")
+        radios(listOf("Petit", "Normal", "Grand"), store.textSize) { store.textSize = it; refresh() }
+
+        header("AFFICHAGE")
+        switch("Afficher la pochette", store.showCover) { store.showCover = it; refresh() }
+        switch("Afficher la durée", store.showDuration) { store.showDuration = it; refresh() }
+        switch("Afficher l'artiste", store.showArtist) { store.showArtist = it; refresh() }
+        switch("Titre complet sur deux lignes", store.twoLines) { store.twoLines = it; refresh() }
+
+        header("AUTRES")
+        action("🎨  Thème de l'application") { themeDialog() }
+        action("↕  Trier les titres") { sortDialog() }
+
+        val sv = ScrollView(this)
+        sv.addView(box)
+        dlg = MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
+            .setTitle("Paramètres")
+            .setView(sv)
+            .setNegativeButton("Fermer", null)
+            .show()
+    }
+
+    // ---- Ouvrir avec ----
+
+    private var pendingOpen: Uri? = null
+
+    private fun handleViewIntent(i: Intent?) {
+        if (i?.action != Intent.ACTION_VIEW) return
+        val u = i.data ?: return
+        setIntent(Intent(this, MainActivity::class.java))
+        if (controller == null) pendingOpen = u else openUri(u)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleViewIntent(intent)
+    }
+
+    private fun openUri(u: Uri) {
+        val c = controller ?: run { pendingOpen = u; return }
+        if (u.authority == "media") {
+            val id = u.lastPathSegment?.toLongOrNull()
+            val idx = all.indexOfFirst { it.id == id }
+            if (idx >= 0) {
+                play(all, idx, null)
+                startActivity(Intent(this, PlayerActivity::class.java))
+                return
+            }
+        }
+        var name = "Titre"
+        try {
+            contentResolver.query(u, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+                if (it.moveToFirst()) name = it.getString(0) ?: name
+            }
+        } catch (e: Exception) {
+        }
+        if (name == "Titre") name = u.lastPathSegment ?: name
+        val title = name.substringBeforeLast('.', name)
+        val item = MediaItem.Builder()
+            .setMediaId(u.toString())
+            .setUri(u)
+            .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(u).build())
+            .setMediaMetadata(
+                androidx.media3.common.MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setArtist("Artiste inconnu")
+                    .build()
+            )
+            .build()
+        c.setMediaItems(listOf(item), 0, 0L)
+        c.prepare()
+        c.play()
+        startActivity(Intent(this, PlayerActivity::class.java))
     }
 
     // ---- Thèmes ----

@@ -42,6 +42,30 @@ class Store(ctx: Context) {
         get() = prefs.getBoolean("vizAsked", false)
         set(v) { prefs.edit().putBoolean("vizAsked", v).apply() }
 
+    var listStyle: Int
+        get() = prefs.getInt("listStyle", 0)
+        set(v) { prefs.edit().putInt("listStyle", v).apply() }
+
+    var textSize: Int
+        get() = prefs.getInt("textSize", 1)
+        set(v) { prefs.edit().putInt("textSize", v).apply() }
+
+    var showCover: Boolean
+        get() = prefs.getBoolean("showCover", true)
+        set(v) { prefs.edit().putBoolean("showCover", v).apply() }
+
+    var showDuration: Boolean
+        get() = prefs.getBoolean("showDuration", true)
+        set(v) { prefs.edit().putBoolean("showDuration", v).apply() }
+
+    var showArtist: Boolean
+        get() = prefs.getBoolean("showArtist", true)
+        set(v) { prefs.edit().putBoolean("showArtist", v).apply() }
+
+    var twoLines: Boolean
+        get() = prefs.getBoolean("twoLines", false)
+        set(v) { prefs.edit().putBoolean("twoLines", v).apply() }
+
     var sortMode: Int
         get() = prefs.getInt("sortMode", 0)
         set(v) { prefs.edit().putInt("sortMode", v).apply() }

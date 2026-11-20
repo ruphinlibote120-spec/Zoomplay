@@ -32,12 +32,12 @@
             android:textStyle="bold" />
 
         <ImageButton
-            android:id="@+id/btnTheme"
+            android:id="@+id/btnSettings"
             android:layout_width="40dp"
             android:layout_height="44dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Thème"
-            android:src="@drawable/ic_palette"
+            android:contentDescription="Paramètres"
+            android:src="@drawable/ic_settings"
             android:tint="?attr/zText" />
 
         <ImageButton

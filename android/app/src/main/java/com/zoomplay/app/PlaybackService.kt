@@ -64,6 +64,7 @@ class PlaybackService : MediaSessionService() {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) { savePos() }
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) { savePos() }
             override fun onRepeatModeChanged(repeatMode: Int) { savePos() }
+            override fun onPlaybackParametersChanged(playbackParameters: androidx.media3.common.PlaybackParameters) { savePos() }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 savePos()
                 handler.removeCallbacks(posTick)
@@ -111,18 +112,23 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun savePos() {
-        if (player.mediaItemCount == 0) return
-        store.prefs.edit()
-            .putInt("qIndex", player.currentMediaItemIndex)
-            .putLong("qPos", player.currentPosition)
+        val e = store.prefs.edit()
             .putBoolean("qShuffle", player.shuffleModeEnabled)
             .putInt("qRepeat", player.repeatMode)
             .putFloat("qSpeed", player.playbackParameters.speed)
-            .apply()
+        if (player.mediaItemCount > 0) {
+            e.putInt("qIndex", player.currentMediaItemIndex).putLong("qPos", player.currentPosition)
+        }
+        e.apply()
     }
 
     /** Remet la dernière file de lecture, en pause, à l'endroit où l'utilisateur s'était arrêté. */
     private fun restore() {
+        if (store.prefs.contains("qShuffle")) {
+            player.shuffleModeEnabled = store.prefs.getBoolean("qShuffle", false)
+            player.repeatMode = store.prefs.getInt("qRepeat", Player.REPEAT_MODE_OFF)
+            player.setPlaybackSpeed(store.prefs.getFloat("qSpeed", 1f))
+        }
         val saved = store.prefs.getString("queue", "") ?: ""
         if (saved.isEmpty()) return
         val ids = saved.split(",").mapNotNull { it.toLongOrNull() }
