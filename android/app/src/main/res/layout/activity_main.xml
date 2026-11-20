@@ -116,7 +116,7 @@
 
         <ImageButton
             android:id="@+id/btnSort"
-            android:layout_width="44dp"
+            android:layout_width="40dp"
             android:layout_height="44dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Trier"
@@ -124,8 +124,17 @@
             android:tint="?attr/zText" />
 
         <ImageButton
+            android:id="@+id/btnFix"
+            android:layout_width="40dp"
+            android:layout_height="44dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Corriger les titres"
+            android:src="@drawable/ic_edit"
+            android:tint="?attr/zText" />
+
+        <ImageButton
             android:id="@+id/btnDup"
-            android:layout_width="44dp"
+            android:layout_width="40dp"
             android:layout_height="44dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Chercher les doublons"

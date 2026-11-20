@@ -1,6 +1,7 @@
 package com.zoomplay.app
 
 import android.content.Context
+import android.os.Build
 import android.provider.MediaStore
 
 /** Lit tous les fichiers audio du téléphone via MediaStore (nouveaux fichiers compris). */
@@ -8,15 +9,20 @@ object Library {
     fun scan(ctx: Context): List<Track> {
         val out = ArrayList<Track>()
         val a = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-        val proj = arrayOf(
+        val withPath = Build.VERSION.SDK_INT < 29
+        val base = arrayListOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.ALBUM_ID,
             MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.DATE_ADDED
+            MediaStore.Audio.Media.DATE_ADDED,
+            MediaStore.Audio.Media.DISPLAY_NAME
         )
+        @Suppress("DEPRECATION")
+        if (withPath) base.add(MediaStore.Audio.Media.DATA)
+        val proj = base.toTypedArray()
         val sel = "${MediaStore.Audio.Media.DURATION} >= 10000 AND " +
             "${MediaStore.Audio.Media.IS_RINGTONE} = 0 AND " +
             "${MediaStore.Audio.Media.IS_NOTIFICATION} = 0 AND " +
@@ -30,6 +36,9 @@ object Library {
                 val iAlbumId = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
                 val iDur = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
                 val iDate = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
+                val iName = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+                @Suppress("DEPRECATION")
+                val iPath = if (withPath) c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA) else -1
                 while (c.moveToNext()) {
                     val artist = c.getString(iArtist)
                     val album = c.getString(iAlbum)
@@ -41,7 +50,9 @@ object Library {
                             album = if (album.isNullOrBlank() || album == "<unknown>") "" else album,
                             albumId = c.getLong(iAlbumId),
                             durationMs = c.getLong(iDur),
-                            dateAdded = c.getLong(iDate)
+                            dateAdded = c.getLong(iDate),
+                            displayName = c.getString(iName) ?: "",
+                            path = if (iPath >= 0) c.getString(iPath) ?: "" else ""
                         )
                     )
                 }

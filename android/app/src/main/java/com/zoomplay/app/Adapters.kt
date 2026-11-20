@@ -1,5 +1,9 @@
 package com.zoomplay.app
 
+import android.text.Editable
+import android.text.TextWatcher
+import android.widget.CheckBox
+import android.widget.EditText
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -92,5 +96,45 @@ class EntryAdapter(
         h.count.text = e.count.toString() + " titre(s)"
         h.itemView.setOnClickListener { onClick(e) }
         h.itemView.setOnLongClickListener { onLong(e); true }
+    }
+}
+
+/** Titre à corriger : ancien nom, nouveau nom (modifiable à la main) et case à cocher. */
+class Fix(val t: Track, var newTitle: String, var checked: Boolean = true)
+
+class FixAdapter(private val items: List<Fix>) : RecyclerView.Adapter<FixAdapter.VH>() {
+
+    class VH(v: View) : RecyclerView.ViewHolder(v) {
+        val cb: CheckBox = v.findViewById(R.id.fixCheck)
+        val old: TextView = v.findViewById(R.id.fixOld)
+        val edit: EditText = v.findViewById(R.id.fixNew)
+        var watcher: TextWatcher? = null
+    }
+
+    fun setAll(on: Boolean) {
+        items.forEach { it.checked = on }
+        notifyDataSetChanged()
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH =
+        VH(LayoutInflater.from(parent.context).inflate(R.layout.item_fix, parent, false))
+
+    override fun getItemCount() = items.size
+
+    override fun onBindViewHolder(h: VH, position: Int) {
+        val f = items[position]
+        h.cb.setOnCheckedChangeListener(null)
+        h.cb.isChecked = f.checked
+        h.cb.setOnCheckedChangeListener { _, on -> f.checked = on }
+        h.old.text = f.t.title
+        h.watcher?.let { h.edit.removeTextChangedListener(it) }
+        h.edit.setText(f.newTitle)
+        val w = object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: Editable?) { f.newTitle = s.toString() }
+        }
+        h.watcher = w
+        h.edit.addTextChangedListener(w)
     }
 }

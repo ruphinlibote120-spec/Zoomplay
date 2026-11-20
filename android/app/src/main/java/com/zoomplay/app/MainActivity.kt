@@ -21,6 +21,9 @@ import android.content.Context
 import android.content.IntentSender
 import androidx.activity.result.IntentSenderRequest
 import android.widget.CheckBox
+import android.content.ContentValues
+import android.media.MediaScannerConnection
+import java.io.File
 import android.widget.ScrollView
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -109,6 +112,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var pendingRename: List<Fix> = emptyList()
+
+    private val writeLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
+        if (r.resultCode == RESULT_OK) runRename(pendingRename) else toast("Autorisation refusée : rien n'a été renommé")
+    }
+
     private val rescan = Runnable { scan() }
 
     private val observer = object : ContentObserver(ui) {
@@ -183,6 +192,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnTheme).setOnClickListener { themeDialog() }
         findViewById<View>(R.id.btnSort).setOnClickListener { sortDialog() }
         findViewById<View>(R.id.btnDup).setOnClickListener { findDuplicates() }
+        findViewById<View>(R.id.btnFix).setOnClickListener { findBadTitles() }
 
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -614,6 +624,131 @@ class MainActivity : AppCompatActivity() {
             .setView(sv)
             .setNegativeButton("Fermer", null)
             .show()
+    }
+
+    // ---- Titres mal rédigés ----
+
+    private fun findBadTitles() {
+        if (!hasAudioPermission()) { requestPerms(); return }
+        toast("Analyse des titres…")
+        Thread {
+            val fixes = all.filter { TitleFix.needsFix(it.title) }.map { Fix(it, TitleFix.clean(it.title)) }
+            runOnUiThread { if (!isDestroyed) showFixes(fixes) }
+        }.start()
+    }
+
+    private fun showFixes(fixes: List<Fix>) {
+        if (fixes.isEmpty()) {
+            MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
+                .setTitle("Tout est correct")
+                .setMessage("Aucun titre ne commence par une minuscule ou un tiret, ne finit par (0), (1)… ni ne contient de caractères inutiles.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        val adapter = FixAdapter(fixes)
+        val rv = RecyclerView(this)
+        rv.layoutManager = LinearLayoutManager(this)
+        rv.adapter = adapter
+        val pad = dp(16f).toInt()
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(pad, 0, pad, 0)
+        box.addView(rv, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(380f).toInt()))
+        val dlg = MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
+            .setTitle(fixes.size.toString() + " titre(s) à corriger")
+            .setMessage("Tout est coché : appuie sur « Tout corriger » pour renommer d'un coup, ou décoche et modifie les noms à la main.")
+            .setView(box)
+            .setNegativeButton("Annuler", null)
+            .setNeutralButton("Tout décocher", null)
+            .setPositiveButton("Tout corriger", null)
+            .show()
+        var allOn = true
+        dlg.getButton(android.content.DialogInterface.BUTTON_NEUTRAL).setOnClickListener {
+            allOn = !allOn
+            adapter.setAll(allOn)
+            (it as TextView).text = if (allOn) "Tout décocher" else "Tout cocher"
+        }
+        dlg.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
+            val sel = fixes.filter { it.checked && TitleFix.sanitize(it.newTitle).isNotEmpty() }
+            if (sel.isEmpty()) {
+                toast("Aucun titre coché")
+            } else {
+                dlg.dismiss()
+                applyFixes(sel)
+            }
+        }
+    }
+
+    private fun applyFixes(list: List<Fix>) {
+        pendingRename = list
+        if (Build.VERSION.SDK_INT >= 30) {
+            try {
+                val pi = MediaStore.createWriteRequest(contentResolver, list.map { it.t.uri })
+                writeLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
+            } catch (e: Exception) {
+                toast("Renommage impossible")
+            }
+        } else {
+            runRename(list)
+        }
+    }
+
+    private fun runRename(list: List<Fix>) {
+        Thread {
+            var ok = 0
+            var failed = 0
+            var recoverable: IntentSender? = null
+            val rest = ArrayList<Fix>()
+            for (f in list) {
+                if (recoverable != null) { rest.add(f); continue }
+                try {
+                    if (renameOne(f)) ok++ else failed++
+                } catch (e: SecurityException) {
+                    if (Build.VERSION.SDK_INT >= 29 && e is RecoverableSecurityException) {
+                        recoverable = e.userAction.actionIntent.intentSender
+                        rest.add(f)
+                    } else failed++
+                } catch (e: Exception) {
+                    failed++
+                }
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                val r = recoverable
+                if (r != null) {
+                    pendingRename = rest
+                    writeLauncher.launch(IntentSenderRequest.Builder(r).build())
+                } else {
+                    toast(ok.toString() + " fichier(s) renommé(s)" + (if (failed > 0) ", $failed échec(s)" else ""))
+                    scan()
+                }
+            }
+        }.start()
+    }
+
+    private fun renameOne(f: Fix): Boolean {
+        val name = TitleFix.sanitize(f.newTitle)
+        if (name.isEmpty()) return false
+        val ext = f.t.displayName.substringAfterLast('.', "").let { if (it.isEmpty()) "" else ".$it" }
+        val newFile = name + ext
+        if (newFile == f.t.displayName && name == f.t.title) return true
+        val cv = ContentValues()
+        cv.put(MediaStore.Audio.Media.DISPLAY_NAME, newFile)
+        cv.put(MediaStore.Audio.Media.TITLE, name)
+        if (Build.VERSION.SDK_INT >= 29) {
+            return contentResolver.update(f.t.uri, cv, null, null) > 0
+        }
+        val old = File(f.t.path)
+        if (!old.exists()) return false
+        val dest = File(old.parentFile, newFile)
+        if (dest.exists() && dest.absolutePath != old.absolutePath) return false
+        if (dest.absolutePath != old.absolutePath && !old.renameTo(dest)) return false
+        @Suppress("DEPRECATION")
+        cv.put(MediaStore.Audio.Media.DATA, dest.absolutePath)
+        val n = contentResolver.update(f.t.uri, cv, null, null)
+        MediaScannerConnection.scanFile(this, arrayOf(dest.absolutePath), null, null)
+        return n > 0
     }
 
     // ---- Doublons ----
