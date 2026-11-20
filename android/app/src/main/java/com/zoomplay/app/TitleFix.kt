@@ -9,18 +9,19 @@ object TitleFix {
 
     // (Audio) (Official Video) (Clip officiel) (Vidéo) … : parenthèses ne contenant que ces mots
     private val tagParen = Regex(
-        "\\(\\s*(?:(?:official|officiel(?:le)?|oficial|clip|audio|vid[eé]o|music)\\s*)+\\)", ic
+        "\\(\\s*(?:(?:official|officiel(?:le)?|oficial|clip|audio|vid[eé]o|music|musique)\\s*)+\\)", ic
     )
 
     // Expressions toujours retirées, où qu'elles soient : "Clip officiel", "Official Video"…
     private val tagPhrase = Regex(
         "\\b(?:clip\\s+offici[ae]l(?:le)?|official\\s+(?:music\\s+)?(?:audio|video|clip)|" +
-            "(?:audio|vid[eé]o)\\s+offici[ae]l(?:le)?|vid[eé]o\\s+clip)\\b", ic
+            "(?:audio|vid[eé]o|music|musique)\\s+offici[ae]l(?:le)?|vid[eé]o\\s+clip|" +
+            "music\\s+vid[eé]o|vid[eé]o\\s+music(?:al)?|musique\\s+vid[eé]o|lyric\\s+vid[eé]o)\\b", ic
     )
 
     // " - Audio", " | Video" au milieu ou "Audio" / "Vidéo" à la fin du titre
-    private val tagSep = Regex("\\s[-|:]\\s*(?:audio|vid[eé]o)\\b", ic)
-    private val tagEnd = Regex("(?:\\s+(?:audio|vid[eé]o))+\\s*$", ic)
+    private val tagSep = Regex("\\s[-|:]\\s*(?:audio|vid[eé]o|music|musique)\\b", ic)
+    private val tagEnd = Regex("(?:\\s+(?:audio|vid[eé]o|music|musique))+\\s*$", ic)
 
     private val copyMark = Regex("(\\s*\\(\\s*\\d{1,2}\\s*\\))+\\s*$")
     private val emptyParen = Regex("\\(\\s*\\)")
