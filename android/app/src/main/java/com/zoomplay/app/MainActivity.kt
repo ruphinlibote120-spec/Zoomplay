@@ -861,10 +861,12 @@ class MainActivity : AppCompatActivity() {
             var failed = 0
             var recoverable: IntentSender? = null
             val rest = ArrayList<Fix>()
+            val done = HashMap<Long, Pair<String, String>>()
             for (f in list) {
                 if (recoverable != null) { rest.add(f); continue }
                 try {
-                    if (renameOne(f)) ok++ else failed++
+                    val res = renameOne(f)
+                    if (res != null) { ok++; done[f.t.id] = res } else failed++
                 } catch (e: SecurityException) {
                     if (Build.VERSION.SDK_INT >= 29 && e is RecoverableSecurityException) {
                         recoverable = e.userAction.actionIntent.intentSender
@@ -876,6 +878,7 @@ class MainActivity : AppCompatActivity() {
             }
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
+                applyRenamed(done)
                 val r = recoverable
                 if (r != null) {
                     pendingRename = rest
@@ -888,28 +891,51 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun renameOne(f: Fix): Boolean {
+    /** Affiche tout de suite les nouveaux noms (liste, mini-lecteur, notification), sans attendre le rescan. */
+    private fun applyRenamed(done: Map<Long, Pair<String, String>>) {
+        if (done.isEmpty()) return
+        all = all.map {
+            val d = done[it.id]
+            if (d != null) it.copy(title = d.first, displayName = d.second) else it
+        }
+        refresh()
+        val c = controller ?: return
+        for (i in 0 until c.mediaItemCount) {
+            val item = c.getMediaItemAt(i)
+            val id = item.mediaId.toLongOrNull() ?: continue
+            val d = done[id] ?: continue
+            c.replaceMediaItem(
+                i,
+                item.buildUpon()
+                    .setMediaMetadata(item.mediaMetadata.buildUpon().setTitle(d.first).build())
+                    .build()
+            )
+        }
+        updateMini()
+    }
+
+    private fun renameOne(f: Fix): Pair<String, String>? {
         val name = TitleFix.sanitize(f.newTitle)
-        if (name.isEmpty()) return false
+        if (name.isEmpty()) return null
         val ext = f.t.displayName.substringAfterLast('.', "").let { if (it.isEmpty()) "" else ".$it" }
         val newFile = name + ext
-        if (newFile == f.t.displayName && name == f.t.title) return true
+        if (newFile == f.t.displayName && name == f.t.title) return Pair(name, newFile)
         val cv = ContentValues()
         cv.put(MediaStore.Audio.Media.DISPLAY_NAME, newFile)
         cv.put(MediaStore.Audio.Media.TITLE, name)
         if (Build.VERSION.SDK_INT >= 29) {
-            return contentResolver.update(f.t.uri, cv, null, null) > 0
+            return if (contentResolver.update(f.t.uri, cv, null, null) > 0) Pair(name, newFile) else null
         }
         val old = File(f.t.path)
-        if (!old.exists()) return false
+        if (!old.exists()) return null
         val dest = File(old.parentFile, newFile)
-        if (dest.exists() && dest.absolutePath != old.absolutePath) return false
-        if (dest.absolutePath != old.absolutePath && !old.renameTo(dest)) return false
+        if (dest.exists() && dest.absolutePath != old.absolutePath) return null
+        if (dest.absolutePath != old.absolutePath && !old.renameTo(dest)) return null
         @Suppress("DEPRECATION")
         cv.put(MediaStore.Audio.Media.DATA, dest.absolutePath)
         val n = contentResolver.update(f.t.uri, cv, null, null)
         MediaScannerConnection.scanFile(this, arrayOf(dest.absolutePath), null, null)
-        return n > 0
+        return if (n > 0) Pair(name, newFile) else null
     }
 
     // ---- Doublons ----
