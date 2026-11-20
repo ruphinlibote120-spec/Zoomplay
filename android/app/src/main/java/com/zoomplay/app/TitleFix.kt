@@ -2,33 +2,50 @@ package com.zoomplay.app
 
 /** Règles de rédaction des titres : détection et correction automatique. */
 object TitleFix {
-    private val bitrate = Regex("\\(\\s*\\d{2,3}\\s*k(bps)?\\s*\\)", RegexOption.IGNORE_CASE)
-    // « Audio », « Vidéo », « Clip officiel »… (avec leurs variantes « Official Video », « Audio Officiel »)
-    private val mediaWords = Regex(
-        "\\b(?:(?:official|officiel(?:le)?)\\s+)?(?:(?:music|lyrics?)\\s+)?(?:audio|vid[eé]o)(?:\\s+(?:official|officiel(?:le)?|clip))?\\b" +
-            "|\\bclip\\s+(?:officiel(?:le)?|official)\\b|\\b(?:officiel(?:le)?|official)\\s+clip\\b",
-        RegexOption.IGNORE_CASE
+    private val ic = RegexOption.IGNORE_CASE
+
+    // (128k) [256kbps] 48kbps …
+    private val bitrate = Regex("\\(\\s*\\d{2,3}\\s*k(bps)?\\s*\\)|\\b\\d{2,3}\\s*kbps\\b", ic)
+
+    // (Audio) (Official Video) (Clip officiel) (Vidéo) … : parenthèses ne contenant que ces mots
+    private val tagParen = Regex(
+        "\\(\\s*(?:(?:official|officiel(?:le)?|oficial|clip|audio|vid[eé]o|music)\\s*)+\\)", ic
     )
-    private val emptyBrackets = Regex("[(\\[{]\\s*[)\\]}]")
+
+    // Expressions toujours retirées, où qu'elles soient : "Clip officiel", "Official Video"…
+    private val tagPhrase = Regex(
+        "\\b(?:clip\\s+offici[ae]l(?:le)?|official\\s+(?:music\\s+)?(?:audio|video|clip)|" +
+            "(?:audio|vid[eé]o)\\s+offici[ae]l(?:le)?|vid[eé]o\\s+clip)\\b", ic
+    )
+
+    // " - Audio", " | Video" au milieu ou "Audio" / "Vidéo" à la fin du titre
+    private val tagSep = Regex("\\s[-|:]\\s*(?:audio|vid[eé]o)\\b", ic)
+    private val tagEnd = Regex("(?:\\s+(?:audio|vid[eé]o))+\\s*$", ic)
+
     private val copyMark = Regex("(\\s*\\(\\s*\\d{1,2}\\s*\\))+\\s*$")
+    private val emptyParen = Regex("\\(\\s*\\)")
     private val spaces = Regex("\\s+")
     private val openSp = Regex("\\(\\s+")
     private val closeSp = Regex("\\s+\\)")
     private val glued = Regex("(?<=[\\p{L}\\p{N}])\\(")
+    private val invisible = Regex("[\\u200B-\\u200F\\u2060\\uFEFF]")
     private const val allowed = " -'’&,.()!+"
 
     /** Version corrigée d'un titre (ou le titre inchangé s'il est déjà correct). */
     fun clean(src: String): String {
         var s = java.text.Normalizer.normalize(src, java.text.Normalizer.Form.NFC)
-        s = s.replace(Regex("[\\u200B-\\u200F\\u2060\\uFEFF]"), "")
-        s = s.map { if (it.isWhitespace() || it == '\u00A0' || it == '\u202F') ' ' else it }.joinToString("")
+        s = invisible.replace(s, "")
+        s = s.map { if (it.isWhitespace() || it == ' ' || it == ' ') ' ' else it }.joinToString("")
         s = s.replace('_', ' ')
-        s = bitrate.replace(s, "")
-        s = mediaWords.replace(s, "")
-        s = emptyBrackets.replace(s, "")
-        s = copyMark.replace(s, "")
         s = s.replace('[', '(').replace(']', ')').replace('{', '(').replace('}', ')')
         s = s.replace('–', '-').replace('—', '-')
+        s = bitrate.replace(s, "")
+        s = tagParen.replace(s, "")
+        s = tagPhrase.replace(s, "")
+        s = emptyParen.replace(s, "")
+        s = tagSep.replace(s, "")
+        s = tagEnd.replace(s, "")
+        s = copyMark.replace(s, "")
         val sb = StringBuilder()
         for (ch in s) if (ch.isLetterOrDigit() || allowed.indexOf(ch) >= 0) sb.append(ch)
         s = sb.toString()
