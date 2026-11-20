@@ -88,7 +88,7 @@ class PlayerActivity : AppCompatActivity() {
         btnRepeat = findViewById(R.id.btnRepeat)
 
         roundCorners(cover, dp(16f))
-        cover.setImageResource(R.drawable.cover_placeholder)
+        cover.setImageResource(R.drawable.logo)
         cover.post {
             val lp = cover.layoutParams
             lp.height = cover.width
