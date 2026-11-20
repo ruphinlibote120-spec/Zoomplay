@@ -85,7 +85,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var trackAdapter: TrackAdapter
     private lateinit var entryAdapter: EntryAdapter
-    private val chipNames = listOf("Chansons", "Playlists", "Favoris", "Artistes", "Albums", "Stats")
+    private val chipNames = listOf("Chansons", "Playlists", "Favoris", "Artistes", "Albums", "Stats", "Dossiers")
 
     private var audioGranted = false
 
@@ -120,6 +120,14 @@ class MainActivity : AppCompatActivity() {
     private var pendingCoverUri: Uri? = null
     private var removeCover = false
     private var coverStatus: TextView? = null
+
+    private val backupLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { u ->
+        if (u != null) doBackup(u)
+    }
+
+    private val restoreLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { u ->
+        if (u != null) confirmRestore(u)
+    }
 
     private val coverLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { u ->
         if (u != null) {
@@ -362,6 +370,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun entries(): List<Entry> = when (tab) {
         5 -> statsEntries()
+        6 -> all.groupBy { it.folder }.toSortedMap(String.CASE_INSENSITIVE_ORDER)
+            .map { Entry(it.key, it.value.size, null, it.value) }
         1 -> store.playlists().map { Entry(it.name, it.ids.size, it, byIds(it.ids)) }
         3 -> all.groupBy { it.artist }.toSortedMap(String.CASE_INSENSITIVE_ORDER)
             .map { Entry(it.key, it.value.size, null, it.value) }
@@ -383,7 +393,7 @@ class MainActivity : AppCompatActivity() {
             g = statsEntries().firstOrNull { it.name == gn }
             group = g
         }
-        val showEntries = g == null && (tab == 1 || tab == 3 || tab == 4 || tab == 5)
+        val showEntries = g == null && (tab == 1 || tab == 3 || tab == 4 || tab == 5 || tab == 6)
 
         chips.forEachIndexedChild { i, tv ->
             val on = i == tab
@@ -851,6 +861,11 @@ class MainActivity : AppCompatActivity() {
         header("AUTRES")
         action("🎨  Thème de l'application") { themeDialog() }
         action("↕  Trier les titres") { sortDialog() }
+        action("💾  Sauvegarder mes données") {
+            val d = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
+            backupLauncher.launch("zoomplay-sauvegarde-$d.zip")
+        }
+        action("♻  Restaurer une sauvegarde") { restoreLauncher.launch(arrayOf("*/*")) }
 
         val sv = ScrollView(this)
         sv.addView(box)
@@ -859,6 +874,64 @@ class MainActivity : AppCompatActivity() {
             .setView(sv)
             .setNegativeButton("Fermer", null)
             .show()
+    }
+
+    // ---- Sauvegarde ----
+
+    private fun doBackup(u: Uri) {
+        val snapshot = all
+        Thread {
+            val ok = try {
+                contentResolver.openOutputStream(u)?.use { BackupManager.export(this, store, snapshot, it) }
+                true
+            } catch (e: Exception) {
+                false
+            }
+            runOnUiThread {
+                if (!isDestroyed) toast(if (ok) "Sauvegarde enregistrée" else "Sauvegarde impossible")
+            }
+        }.start()
+    }
+
+    private fun confirmRestore(u: Uri) {
+        MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
+            .setTitle("Restaurer la sauvegarde ?")
+            .setMessage("Tes playlists, favoris, statistiques, infos modifiées et réglages actuels seront remplacés par ceux de la sauvegarde.")
+            .setPositiveButton("Restaurer") { _, _ -> doRestore(u) }
+            .setNegativeButton("Annuler", null)
+            .show()
+    }
+
+    private fun doRestore(u: Uri) {
+        val snapshot = all
+        Thread {
+            var res: BackupManager.Result? = null
+            var err: String? = null
+            try {
+                val lib = if (snapshot.isEmpty() && hasAudioPermission()) Library.scan(this) else snapshot
+                contentResolver.openInputStream(u)?.use { res = BackupManager.restore(this, store, lib, it) }
+            } catch (e: Exception) {
+                err = e.message ?: "Fichier illisible"
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                val r = res
+                if (r == null) {
+                    toast("Restauration impossible : " + (err ?: "fichier illisible"))
+                } else {
+                    MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
+                        .setTitle("Sauvegarde restaurée")
+                        .setMessage(
+                            r.playlists.toString() + " playlist(s), " + r.favorites.toString() + " favori(s) retrouvés.\n" +
+                                r.matched.toString() + " chanson(s) reconnue(s)" +
+                                (if (r.missing > 0) ", " + r.missing.toString() + " introuvable(s) sur ce téléphone (ignorées)." else ".")
+                        )
+                        .setPositiveButton("OK") { _, _ -> recreate() }
+                        .setOnCancelListener { recreate() }
+                        .show()
+                }
+            }
+        }.start()
     }
 
     // ---- Ouvrir avec ----

@@ -18,7 +18,8 @@ data class Track(
     val displayName: String = "",
     val path: String = "",
     val year: Int = 0,
-    val cover: String = ""
+    val cover: String = "",
+    val folder: String = ""
 ) {
     val uri: Uri
         get() = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
