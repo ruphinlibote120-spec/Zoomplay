@@ -34,6 +34,14 @@ class Store(ctx: Context) {
         get() = prefs.getInt("theme", 0)
         set(v) { prefs.edit().putInt("theme", v).apply() }
 
+    var vizStyle: Int
+        get() = prefs.getInt("vizStyle", 0)
+        set(v) { prefs.edit().putInt("vizStyle", v).apply() }
+
+    var vizAsked: Boolean
+        get() = prefs.getBoolean("vizAsked", false)
+        set(v) { prefs.edit().putBoolean("vizAsked", v).apply() }
+
     var sortMode: Int
         get() = prefs.getInt("sortMode", 0)
         set(v) { prefs.edit().putInt("sortMode", v).apply() }

@@ -60,6 +60,15 @@ class PlaybackService : MediaSessionService() {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
                 attachFx(audioSessionId)
             }
+            override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) { queueSoon() }
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) { savePos() }
+            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) { savePos() }
+            override fun onRepeatModeChanged(repeatMode: Int) { savePos() }
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                savePos()
+                handler.removeCallbacks(posTick)
+                if (isPlaying) handler.postDelayed(posTick, 5000)
+            }
         })
         val open = PendingIntent.getActivity(
             this, 0,
@@ -75,16 +84,78 @@ class PlaybackService : MediaSessionService() {
         provider.setSmallIcon(R.drawable.ic_notif)
         setMediaNotificationProvider(provider)
         attachFx(player.audioSessionId)
+        restore()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
 
+    private val posTick = object : Runnable {
+        override fun run() {
+            savePos()
+            handler.postDelayed(this, 5000)
+        }
+    }
+    private val queueSave = Runnable { saveQueue() }
+
+    private fun queueSoon() {
+        handler.removeCallbacks(queueSave)
+        handler.postDelayed(queueSave, 1000)
+    }
+
+    private fun saveQueue() {
+        val n = player.mediaItemCount
+        if (n == 0) return
+        val ids = (0 until n).joinToString(",") { player.getMediaItemAt(it).mediaId }
+        store.prefs.edit().putString("queue", ids).apply()
+        savePos()
+    }
+
+    private fun savePos() {
+        if (player.mediaItemCount == 0) return
+        store.prefs.edit()
+            .putInt("qIndex", player.currentMediaItemIndex)
+            .putLong("qPos", player.currentPosition)
+            .putBoolean("qShuffle", player.shuffleModeEnabled)
+            .putInt("qRepeat", player.repeatMode)
+            .putFloat("qSpeed", player.playbackParameters.speed)
+            .apply()
+    }
+
+    /** Remet la dernière file de lecture, en pause, à l'endroit où l'utilisateur s'était arrêté. */
+    private fun restore() {
+        val saved = store.prefs.getString("queue", "") ?: ""
+        if (saved.isEmpty()) return
+        val ids = saved.split(",").mapNotNull { it.toLongOrNull() }
+        if (ids.isEmpty()) return
+        val idx = store.prefs.getInt("qIndex", 0)
+        val pos = store.prefs.getLong("qPos", 0L)
+        val shuffle = store.prefs.getBoolean("qShuffle", false)
+        val repeat = store.prefs.getInt("qRepeat", Player.REPEAT_MODE_OFF)
+        val speed = store.prefs.getFloat("qSpeed", 1f)
+        Thread {
+            val lib = try { Library.scan(this).associateBy { it.id } } catch (e: Exception) { emptyMap() }
+            val items = ids.mapNotNull { lib[it] }.map { it.toMediaItem() }
+            handler.post {
+                if (items.isEmpty() || player.mediaItemCount > 0) return@post
+                val curId = ids.getOrNull(idx)?.toString()
+                val start = items.indexOfFirst { it.mediaId == curId }.coerceAtLeast(0)
+                player.shuffleModeEnabled = shuffle
+                player.repeatMode = repeat
+                player.setPlaybackSpeed(speed)
+                player.setMediaItems(items, start, pos)
+                player.prepare()
+            }
+        }.start()
+    }
+
     override fun onTaskRemoved(rootIntent: Intent?) {
+        saveQueue()
         val p = session?.player
         if (p == null || !p.playWhenReady || p.mediaItemCount == 0) stopSelf()
     }
 
     override fun onDestroy() {
+        saveQueue()
         handler.removeCallbacksAndMessages(null)
         releaseFx()
         session?.release()
@@ -103,6 +174,7 @@ class PlaybackService : MediaSessionService() {
     private fun attachFx(sessionId: Int) {
         if (sessionId == C.AUDIO_SESSION_ID_UNSET) return
         releaseFx()
+        VizBus.sessionId = sessionId
         try {
             eq = Equalizer(0, sessionId)
             loud = LoudnessEnhancer(sessionId)

@@ -41,6 +41,11 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var btnLike: ImageButton
     private lateinit var btnShuffle: ImageButton
     private lateinit var btnRepeat: ImageButton
+    private lateinit var viz: VizView
+
+    private val micLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {
+        viz.start()
+    }
 
     private val speeds = floatArrayOf(0.75f, 1f, 1.25f, 1.5f, 2f)
     private var currentId = -1L
@@ -86,6 +91,8 @@ class PlayerActivity : AppCompatActivity() {
         btnLike = findViewById(R.id.btnLike)
         btnShuffle = findViewById(R.id.btnShuffle)
         btnRepeat = findViewById(R.id.btnRepeat)
+        viz = findViewById(R.id.viz)
+        viz.onNeedPermission = { micLauncher.launch(android.Manifest.permission.RECORD_AUDIO) }
 
         roundCorners(cover, dp(16f))
         cover.setImageResource(R.drawable.logo)
@@ -154,9 +161,18 @@ class PlayerActivity : AppCompatActivity() {
             }
         }, ContextCompat.getMainExecutor(this))
         ui.post(ticker)
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED && !store.vizAsked
+        ) {
+            store.vizAsked = true
+            micLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+        } else {
+            viz.start()
+        }
     }
 
     override fun onStop() {
+        viz.stop()
         ui.removeCallbacks(ticker)
         controller?.removeListener(listener)
         future?.let { MediaController.releaseFuture(it) }
