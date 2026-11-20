@@ -802,7 +802,7 @@ class MainActivity : AppCompatActivity() {
         if (fixes.isEmpty()) {
             MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
                 .setTitle("Tout est correct")
-                .setMessage("Aucun titre ne commence par une minuscule ou un tiret, ne finit par (0), (1)… ni ne contient de caractères inutiles.")
+                .setMessage("Aucun titre ne commence par une minuscule ou un tiret, ne finit par (0), (1)…, ne contient « Audio », « Vidéo » ou « Clip officiel », ni de caractères inutiles.")
                 .setPositiveButton("OK", null)
                 .show()
             return

@@ -3,6 +3,13 @@ package com.zoomplay.app
 /** Règles de rédaction des titres : détection et correction automatique. */
 object TitleFix {
     private val bitrate = Regex("\\(\\s*\\d{2,3}\\s*k(bps)?\\s*\\)", RegexOption.IGNORE_CASE)
+    // « Audio », « Vidéo », « Clip officiel »… (avec leurs variantes « Official Video », « Audio Officiel »)
+    private val mediaWords = Regex(
+        "\\b(?:(?:official|officiel(?:le)?)\\s+)?(?:(?:music|lyrics?)\\s+)?(?:audio|vid[eé]o)(?:\\s+(?:official|officiel(?:le)?|clip))?\\b" +
+            "|\\bclip\\s+(?:officiel(?:le)?|official)\\b|\\b(?:officiel(?:le)?|official)\\s+clip\\b",
+        RegexOption.IGNORE_CASE
+    )
+    private val emptyBrackets = Regex("[(\\[{]\\s*[)\\]}]")
     private val copyMark = Regex("(\\s*\\(\\s*\\d{1,2}\\s*\\))+\\s*$")
     private val spaces = Regex("\\s+")
     private val openSp = Regex("\\(\\s+")
@@ -17,6 +24,8 @@ object TitleFix {
         s = s.map { if (it.isWhitespace() || it == '\u00A0' || it == '\u202F') ' ' else it }.joinToString("")
         s = s.replace('_', ' ')
         s = bitrate.replace(s, "")
+        s = mediaWords.replace(s, "")
+        s = emptyBrackets.replace(s, "")
         s = copyMark.replace(s, "")
         s = s.replace('[', '(').replace(']', ')').replace('{', '(').replace('}', ')')
         s = s.replace('–', '-').replace('—', '-')
