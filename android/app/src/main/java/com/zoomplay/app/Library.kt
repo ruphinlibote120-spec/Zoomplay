@@ -8,7 +8,9 @@ import android.provider.MediaStore
 object Library {
     fun scan(ctx: Context): List<Track> {
         val out = ArrayList<Track>()
-        val ov = Store(ctx).titleOverrides()
+        val st = Store(ctx)
+        val ov = st.titleOverrides()
+        val mo = st.metaOverrides()
         val a = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         val withPath = Build.VERSION.SDK_INT < 29
         val base = arrayListOf(
@@ -19,7 +21,8 @@ object Library {
             MediaStore.Audio.Media.ALBUM_ID,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.DATE_ADDED,
-            MediaStore.Audio.Media.DISPLAY_NAME
+            MediaStore.Audio.Media.DISPLAY_NAME,
+            MediaStore.Audio.Media.YEAR
         )
         @Suppress("DEPRECATION")
         if (withPath) base.add(MediaStore.Audio.Media.DATA)
@@ -38,14 +41,17 @@ object Library {
                 val iDur = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
                 val iDate = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
                 val iName = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+                val iYear = c.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
                 @Suppress("DEPRECATION")
                 val iPath = if (withPath) c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA) else -1
                 while (c.moveToNext()) {
-                    val artist = c.getString(iArtist)
-                    val album = c.getString(iAlbum)
+                    val id = c.getLong(iId)
+                    val m = mo[id]
+                    val artist = m?.artist ?: c.getString(iArtist)
+                    val album = m?.album ?: c.getString(iAlbum)
                     out.add(
                         Track(
-                            id = c.getLong(iId),
+                            id = id,
                             title = ov[c.getLong(iId)] ?: c.getString(iTitle) ?: "Sans titre",
                             artist = if (artist.isNullOrBlank() || artist == "<unknown>") "Artiste inconnu" else artist,
                             album = if (album.isNullOrBlank() || album == "<unknown>") "" else album,
@@ -53,7 +59,9 @@ object Library {
                             durationMs = c.getLong(iDur),
                             dateAdded = c.getLong(iDate),
                             displayName = c.getString(iName) ?: "",
-                            path = if (iPath >= 0) c.getString(iPath) ?: "" else ""
+                            path = if (iPath >= 0) c.getString(iPath) ?: "" else "",
+                            year = m?.year ?: c.getInt(iYear),
+                            cover = m?.cover ?: ""
                         )
                     )
                 }

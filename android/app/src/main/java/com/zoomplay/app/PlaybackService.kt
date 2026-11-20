@@ -41,6 +41,7 @@ class PlaybackService : MediaSessionService() {
     private var loud: LoudnessEnhancer? = null
     private val handler = Handler(Looper.getMainLooper())
     private var sleepRunnable: Runnable? = null
+    private var countedId = -1L
 
     override fun onCreate() {
         super.onCreate()
@@ -61,12 +62,18 @@ class PlaybackService : MediaSessionService() {
                 attachFx(audioSessionId)
             }
             override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) { queueSoon() }
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) { savePos() }
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                countedId = -1L
+                savePos()
+                updateWidget()
+            }
+            override fun onMediaMetadataChanged(mediaMetadata: androidx.media3.common.MediaMetadata) { updateWidget() }
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) { savePos() }
             override fun onRepeatModeChanged(repeatMode: Int) { savePos() }
             override fun onPlaybackParametersChanged(playbackParameters: androidx.media3.common.PlaybackParameters) { savePos() }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 savePos()
+                updateWidget()
                 handler.removeCallbacks(posTick)
                 if (isPlaying) handler.postDelayed(posTick, 5000)
             }
@@ -93,8 +100,32 @@ class PlaybackService : MediaSessionService() {
     private val posTick = object : Runnable {
         override fun run() {
             savePos()
+            countPlay()
             handler.postDelayed(this, 5000)
         }
+    }
+
+    /** Compte une écoute quand le titre a joué assez longtemps (20 s, ou 60 % pour les très courts). */
+    private fun countPlay() {
+        if (!player.isPlaying) return
+        val id = player.currentMediaItem?.mediaId?.toLongOrNull() ?: return
+        if (id == countedId) return
+        val dur = player.duration
+        val need = if (dur > 0) minOf(20_000L, dur * 6 / 10) else 20_000L
+        if (player.currentPosition >= need) {
+            countedId = id
+            store.bumpPlay(id)
+        }
+    }
+
+    private fun updateWidget() {
+        val md = player.mediaMetadata
+        store.prefs.edit()
+            .putString("wTitle", md.title?.toString() ?: "")
+            .putString("wArtist", md.artist?.toString() ?: "")
+            .putBoolean("wPlaying", player.isPlaying)
+            .apply()
+        ZoomWidget.updateAll(this)
     }
     private val queueSave = Runnable { saveQueue() }
 
@@ -161,6 +192,8 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        store.prefs.edit().putBoolean("wPlaying", false).apply()
+        ZoomWidget.updateAll(this)
         saveQueue()
         handler.removeCallbacksAndMessages(null)
         releaseFx()
@@ -262,6 +295,37 @@ class PlaybackService : MediaSessionService() {
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
         }
 
+        override fun onPlaybackResumption(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val f = com.google.common.util.concurrent.SettableFuture.create<MediaSession.MediaItemsWithStartPosition>()
+            val saved = store.prefs.getString("queue", "") ?: ""
+            val ids = saved.split(",").mapNotNull { it.toLongOrNull() }
+            if (ids.isEmpty()) {
+                f.setException(UnsupportedOperationException("Aucune file à reprendre"))
+                return f
+            }
+            val idx = store.prefs.getInt("qIndex", 0)
+            val pos = store.prefs.getLong("qPos", 0L)
+            Thread {
+                try {
+                    val lib = Library.scan(this@PlaybackService).associateBy { it.id }
+                    val items = ids.mapNotNull { lib[it] }.map { it.toMediaItem() }
+                    if (items.isEmpty()) {
+                        f.setException(UnsupportedOperationException("File introuvable"))
+                    } else {
+                        val curId = ids.getOrNull(idx)?.toString()
+                        val start = items.indexOfFirst { it.mediaId == curId }.coerceAtLeast(0)
+                        f.set(MediaSession.MediaItemsWithStartPosition(items, start, pos))
+                    }
+                } catch (e: Exception) {
+                    f.setException(e)
+                }
+            }.start()
+            return f
+        }
+
         override fun onAddMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
@@ -284,5 +348,15 @@ class LogoLoader(ctx: android.content.Context) : BitmapLoader {
 
     override fun supportsMimeType(mimeType: String) = true
     override fun decodeBitmap(data: ByteArray): ListenableFuture<Bitmap> = Futures.immediateFuture(bmp)
-    override fun loadBitmap(uri: Uri): ListenableFuture<Bitmap> = Futures.immediateFuture(bmp)
+    override fun loadBitmap(uri: Uri): ListenableFuture<Bitmap> {
+        // pochette choisie par l'utilisateur pour ce titre, sinon le logo
+        if (uri.scheme == "file") {
+            try {
+                val b = BitmapFactory.decodeFile(uri.path)
+                if (b != null) return Futures.immediateFuture(Bitmap.createScaledBitmap(b, 384, 384, true))
+            } catch (e: Exception) {
+            }
+        }
+        return Futures.immediateFuture(bmp)
+    }
 }

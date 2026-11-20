@@ -6,6 +6,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.database.ContentObserver
 import android.net.Uri
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -83,7 +85,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var trackAdapter: TrackAdapter
     private lateinit var entryAdapter: EntryAdapter
-    private val chipNames = listOf("Chansons", "Playlists", "Favoris", "Artistes", "Albums")
+    private val chipNames = listOf("Chansons", "Playlists", "Favoris", "Artistes", "Albums", "Stats")
 
     private var audioGranted = false
 
@@ -114,6 +116,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var pendingRename: List<Fix> = emptyList()
+
+    private var pendingCoverUri: Uri? = null
+    private var removeCover = false
+    private var coverStatus: TextView? = null
+
+    private val coverLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { u ->
+        if (u != null) {
+            pendingCoverUri = u
+            removeCover = false
+            coverStatus?.text = "Nouvelle pochette choisie ✓"
+        }
+    }
 
     private val writeLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
         if (r.resultCode == RESULT_OK) runRename(pendingRename) else toast("Autorisation refusée : rien n'a été renommé")
@@ -331,7 +345,23 @@ class MainActivity : AppCompatActivity() {
         else -> l.sortedByDescending { it.dateAdded }
     }
 
+    private fun statsEntries(): List<Entry> {
+        val st = store.stats()
+        val most = all.filter { (st[it.id]?.get(0) ?: 0L) > 0L }
+            .sortedByDescending { st[it.id]?.get(0) ?: 0L }.take(50)
+        val recent = all.filter { (st[it.id]?.get(1) ?: 0L) > 0L }
+            .sortedByDescending { st[it.id]?.get(1) ?: 0L }.take(50)
+        val since = System.currentTimeMillis() / 1000 - 7 * 86400
+        val week = all.filter { it.dateAdded >= since }.sortedByDescending { it.dateAdded }
+        return listOf(
+            Entry("Les plus écoutées", most.size, null, most, true),
+            Entry("Écoutées récemment", recent.size, null, recent, true),
+            Entry("Ajoutées cette semaine", week.size, null, week, true)
+        )
+    }
+
     private fun entries(): List<Entry> = when (tab) {
+        5 -> statsEntries()
         1 -> store.playlists().map { Entry(it.name, it.ids.size, it, byIds(it.ids)) }
         3 -> all.groupBy { it.artist }.toSortedMap(String.CASE_INSENSITIVE_ORDER)
             .map { Entry(it.key, it.value.size, null, it.value) }
@@ -348,7 +378,12 @@ class MainActivity : AppCompatActivity() {
             g = store.playlists().firstOrNull { it.id == pid }?.let { Entry(it.name, it.ids.size, it, byIds(it.ids)) }
             group = g
         }
-        val showEntries = g == null && (tab == 1 || tab == 3 || tab == 4)
+        if (g != null && g.keepOrder) {
+            val gn = g.name
+            g = statsEntries().firstOrNull { it.name == gn }
+            group = g
+        }
+        val showEntries = g == null && (tab == 1 || tab == 3 || tab == 4 || tab == 5)
 
         chips.forEachIndexedChild { i, tv ->
             val on = i == tab
@@ -369,7 +404,7 @@ class MainActivity : AppCompatActivity() {
             if (list.layoutManager !is LinearLayoutManager || list.layoutManager is GridLayoutManager) list.layoutManager = LinearLayoutManager(this)
             if (list.adapter !== entryAdapter) list.adapter = entryAdapter
             shown = emptyList()
-            count.text = es.size.toString() + " " + chipNames[tab].lowercase().trimEnd('s') + "(s)"
+            count.text = es.size.toString() + " " + (if (tab == 5) "liste(s)" else chipNames[tab].lowercase().trimEnd('s') + "(s)")
             showEmpty(
                 es.isEmpty(),
                 if (tab == 1) "Aucune playlist.\nAppuie sur « Nouvelle playlist » pour en créer une."
@@ -378,7 +413,7 @@ class MainActivity : AppCompatActivity() {
             )
         } else {
             var l: List<Track> = when {
-                g != null -> if (g.pl != null) g.tracks else sorted(g.tracks)
+                g != null -> if (g.pl != null || g.keepOrder) g.tracks else sorted(g.tracks)
                 tab == 2 -> { val f = store.favorites(); sorted(all.filter { f.contains(it.id) }) }
                 else -> sorted(all)
             }
@@ -401,6 +436,7 @@ class MainActivity : AppCompatActivity() {
                     !hasAudioPermission() -> "Autorise l'accès à la musique pour afficher tes titres.\nAppuie ici pour l'autoriser."
                     tab == 2 && g == null -> "Aucun favori pour l'instant.\nAppuie sur ⋮ à côté d'un titre pour l'ajouter."
                     q.isNotEmpty() -> "Aucun résultat."
+                    g != null && g.keepOrder -> "Écoute quelques chansons : cette liste se remplit toute seule."
                     g != null -> "Cette liste est vide."
                     else -> "Aucun fichier audio trouvé sur le téléphone."
                 }
@@ -495,6 +531,7 @@ class MainActivity : AppCompatActivity() {
         m.menu.add(0, 4, 3, "Ajouter à une playlist")
         if (group?.pl != null) m.menu.add(0, 5, 4, "Retirer de la playlist")
         m.menu.add(0, 6, 5, "Renommer")
+        m.menu.add(0, 7, 6, "Modifier les infos…")
         m.setOnMenuItemClickListener { mi ->
             val c = controller
             when (mi.itemId) {
@@ -517,6 +554,7 @@ class MainActivity : AppCompatActivity() {
                     refresh()
                 }
                 6 -> renameDialog(t)
+                7 -> editTagsDialog(t)
             }
             true
         }
@@ -585,6 +623,144 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             .show()
+    }
+
+    // ---- Éditeur d'infos (titre, artiste, album, année, pochette) ----
+
+    private fun editTagsDialog(t: Track) {
+        pendingCoverUri = null
+        removeCover = false
+        val pad = dp(20f).toInt()
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(pad, pad / 2, pad, 0)
+        fun field(label: String, value: String, numeric: Boolean = false): EditText {
+            val l = TextView(this)
+            l.text = label
+            l.textSize = 12f
+            l.setTextColor(tc(R.attr.zMuted))
+            l.setPadding(0, dp(10f).toInt(), 0, 0)
+            box.addView(l)
+            val e = EditText(this)
+            e.setText(value)
+            e.setSingleLine(true)
+            e.setTextColor(tc(R.attr.zText))
+            if (numeric) e.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            box.addView(e)
+            return e
+        }
+        val eTitle = field("Titre (renomme aussi le fichier)", t.title)
+        val eArtist = field("Artiste", if (t.artist == "Artiste inconnu") "" else t.artist)
+        val eAlbum = field("Album", t.album)
+        val eYear = field("Année", if (t.year > 0) t.year.toString() else "", true)
+
+        val cov = TextView(this)
+        cov.text = if (t.cover.isNotEmpty()) "Pochette personnalisée · changer…" else "Choisir une pochette…"
+        cov.textSize = 15f
+        cov.setTextColor(tc(R.attr.zAccent))
+        cov.setPadding(0, dp(16f).toInt(), 0, dp(6f).toInt())
+        cov.setOnClickListener { coverLauncher.launch("image/*") }
+        box.addView(cov)
+        coverStatus = cov
+        if (t.cover.isNotEmpty()) {
+            val rm = TextView(this)
+            rm.text = "Retirer la pochette (remet le logo)"
+            rm.textSize = 14f
+            rm.setTextColor(tc(R.attr.zMuted))
+            rm.setPadding(0, dp(6f).toInt(), 0, dp(6f).toInt())
+            rm.setOnClickListener {
+                removeCover = true
+                pendingCoverUri = null
+                cov.text = "Pochette retirée ✓"
+            }
+            box.addView(rm)
+        }
+        val sv = ScrollView(this)
+        sv.addView(box)
+        MaterialAlertDialogBuilder(this, R.style.ZoomDialog)
+            .setTitle("Modifier les infos")
+            .setView(sv)
+            .setPositiveButton("Enregistrer") { _, _ ->
+                saveTags(
+                    t,
+                    eTitle.text.toString().trim(),
+                    eArtist.text.toString().trim(),
+                    eAlbum.text.toString().trim(),
+                    eYear.text.toString().trim().toIntOrNull()
+                )
+            }
+            .setNegativeButton("Annuler", null)
+            .show()
+    }
+
+    private fun saveTags(t: Track, title: String, artist: String, album: String, year: Int?) {
+        val uri = pendingCoverUri
+        val rm = removeCover
+        Thread {
+            var cover: String? = null
+            if (uri != null) cover = try { saveCover(t.id, uri) } catch (e: Exception) { null }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                val all0 = store.metaOverrides()
+                val m = all0[t.id] ?: Store.Meta()
+                m.artist = if (artist.isEmpty() || artist == "Artiste inconnu") null else artist
+                m.album = if (album.isEmpty()) null else album
+                m.year = year
+                if (rm) {
+                    m.cover?.let { try { File(it).delete() } catch (e: Exception) {} }
+                    m.cover = null
+                } else if (cover != null) {
+                    m.cover?.let { try { File(it).delete() } catch (e: Exception) {} }
+                    m.cover = cover
+                }
+                all0[t.id] = m
+                store.setMetaOverrides(all0)
+                val nt = t.copy(
+                    artist = m.artist ?: "Artiste inconnu",
+                    album = m.album ?: "",
+                    year = m.year ?: 0,
+                    cover = m.cover ?: ""
+                )
+                this.all = this.all.map { if (it.id == t.id) nt else it }
+                pushMetaToPlayer(nt)
+                refresh()
+                toast("Infos enregistrées")
+                if (title.isNotEmpty() && title != t.title) applyFixes(listOf(Fix(nt, title)))
+            }
+        }.start()
+    }
+
+    /** Copie l'image choisie dans le dossier de l'application (600 px max) et renvoie son chemin. */
+    private fun saveCover(id: Long, uri: Uri): String? {
+        val dir = File(filesDir, "covers")
+        dir.mkdirs()
+        val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, o) }
+        var s = 1
+        while (maxOf(o.outWidth, o.outHeight) / (s * 2) >= 900) s *= 2
+        val o2 = BitmapFactory.Options().apply { inSampleSize = s }
+        val bmp = contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, o2) } ?: return null
+        val k = 600f / maxOf(bmp.width, bmp.height)
+        val out = if (k < 1f) Bitmap.createScaledBitmap(bmp, (bmp.width * k).toInt(), (bmp.height * k).toInt(), true) else bmp
+        val f = File(dir, id.toString() + "_" + System.currentTimeMillis() + ".jpg")
+        f.outputStream().use { out.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+        return f.absolutePath
+    }
+
+    /** Met à jour tout de suite le lecteur (notification, mini-lecteur) pour ce titre. */
+    private fun pushMetaToPlayer(t: Track) {
+        val c = controller ?: return
+        for (i in 0 until c.mediaItemCount) {
+            val item = c.getMediaItemAt(i)
+            if (item.mediaId.toLongOrNull() != t.id) continue
+            val nm = item.mediaMetadata.buildUpon()
+                .setArtist(t.artist)
+                .setAlbumTitle(t.album)
+                .setArtworkUri(t.toMediaItem().mediaMetadata.artworkUri)
+                .build()
+            c.replaceMediaItem(i, item.buildUpon().setMediaMetadata(nm).build())
+        }
+        updateMini()
     }
 
     private fun renameDialog(t: Track) {

@@ -104,7 +104,7 @@ class TrackAdapter(
 }
 
 /** Ligne de liste de groupes : playlist, artiste ou album. */
-class Entry(val name: String, val count: Int, val pl: Store.Playlist?, val tracks: List<Track>)
+class Entry(val name: String, val count: Int, val pl: Store.Playlist?, val tracks: List<Track>, val keepOrder: Boolean = false)
 
 class EntryAdapter(
     private val onClick: (Entry) -> Unit,

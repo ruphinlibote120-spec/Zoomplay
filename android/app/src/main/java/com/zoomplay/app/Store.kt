@@ -59,6 +59,66 @@ class Store(ctx: Context) {
         prefs.edit().putString("titleOv", o.toString()).apply()
     }
 
+    /** Infos modifiées dans Zoomplay (artiste, album, année, pochette) : elles priment sur celles du fichier. */
+    class Meta(var artist: String? = null, var album: String? = null, var year: Int? = null, var cover: String? = null)
+
+    fun metaOverrides(): MutableMap<Long, Meta> {
+        val out = HashMap<Long, Meta>()
+        try {
+            val o = JSONObject(prefs.getString("metaOv", "{}") ?: "{}")
+            for (k in o.keys()) {
+                val id = k.toLongOrNull() ?: continue
+                val j = o.getJSONObject(k)
+                out[id] = Meta(
+                    if (j.has("artist")) j.getString("artist") else null,
+                    if (j.has("album")) j.getString("album") else null,
+                    if (j.has("year")) j.getInt("year") else null,
+                    if (j.has("cover")) j.getString("cover") else null
+                )
+            }
+        } catch (e: Exception) {
+        }
+        return out
+    }
+
+    fun setMetaOverrides(m: Map<Long, Meta>) {
+        val o = JSONObject()
+        for ((id, v) in m) {
+            val j = JSONObject()
+            v.artist?.let { j.put("artist", it) }
+            v.album?.let { j.put("album", it) }
+            v.year?.let { j.put("year", it) }
+            v.cover?.let { j.put("cover", it) }
+            if (j.length() > 0) o.put(id.toString(), j)
+        }
+        prefs.edit().putString("metaOv", o.toString()).apply()
+    }
+
+    /** Statistiques d'écoute : id -> [nombre d'écoutes, dernière écoute en ms]. */
+    fun stats(): Map<Long, LongArray> {
+        val out = HashMap<Long, LongArray>()
+        try {
+            val o = JSONObject(prefs.getString("stats", "{}") ?: "{}")
+            for (k in o.keys()) {
+                val id = k.toLongOrNull() ?: continue
+                val a = o.getJSONArray(k)
+                out[id] = longArrayOf(a.getLong(0), a.getLong(1))
+            }
+        } catch (e: Exception) {
+        }
+        return out
+    }
+
+    @Synchronized
+    fun bumpPlay(id: Long) {
+        val m = HashMap(stats())
+        val cur = m[id]
+        m[id] = longArrayOf((cur?.get(0) ?: 0L) + 1L, System.currentTimeMillis())
+        val o = JSONObject()
+        for ((k, v) in m) o.put(k.toString(), JSONArray().put(v[0]).put(v[1]))
+        prefs.edit().putString("stats", o.toString()).apply()
+    }
+
     var listStyle: Int
         get() = prefs.getInt("listStyle", 0)
         set(v) { prefs.edit().putInt("listStyle", v).apply() }

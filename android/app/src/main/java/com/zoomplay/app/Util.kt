@@ -48,8 +48,28 @@ fun roundCorners(v: View, radiusPx: Float) {
 
 /** Une seule image (logo Zoomplay) pour tous les titres. */
 object ArtLoader {
+    private val cache = LruCache<String, Bitmap>(48)
+
     fun load(ctx: Context, t: Track, iv: ImageView, sizePx: Int) {
         iv.tag = t.id
+        if (t.cover.isNotEmpty()) {
+            val key = t.cover + "@" + sizePx
+            var b = cache.get(key)
+            if (b == null) {
+                try {
+                    val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(t.cover, o)
+                    var s = 1
+                    while (o.outWidth / (s * 2) >= sizePx) s *= 2
+                    val o2 = BitmapFactory.Options().apply { inSampleSize = s }
+                    b = BitmapFactory.decodeFile(t.cover, o2)
+                    if (b != null) cache.put(key, b)
+                } catch (e: Exception) {
+                    b = null
+                }
+            }
+            if (b != null) { iv.setImageBitmap(b); return }
+        }
         iv.setImageResource(R.drawable.logo)
     }
 }

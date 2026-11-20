@@ -1,6 +1,7 @@
 package com.zoomplay.app
 
 import android.content.ContentUris
+import java.io.File
 import android.net.Uri
 import android.provider.MediaStore
 import androidx.media3.common.MediaItem
@@ -15,7 +16,9 @@ data class Track(
     val durationMs: Long,
     val dateAdded: Long,
     val displayName: String = "",
-    val path: String = ""
+    val path: String = "",
+    val year: Int = 0,
+    val cover: String = ""
 ) {
     val uri: Uri
         get() = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
@@ -33,7 +36,7 @@ data class Track(
                     .setTitle(title)
                     .setArtist(artist)
                     .setAlbumTitle(album)
-                    .setArtworkUri(artUri)
+                    .setArtworkUri(if (cover.isNotEmpty()) Uri.fromFile(File(cover)) else artUri)
                     .build()
             )
             .build()
